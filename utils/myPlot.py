@@ -34,16 +34,18 @@ class MyPlot:
     def __init__(self, data: np.ndarray, title: str):
         fs = len(data)
         self.title = title
-        self.f, self.t, self.nd = signal.stft(data, fs=fs, window='hann', nperseg=256, noverlap=None, nfft=None,
-                                              detrend=False, return_onesided=True, boundary='zeros', padded=True,
-                                              axis=-1)
+        self.f, self.t, self.nd = signal.stft(data, fs=fs, window='hann', nperseg=1024, noverlap=768, nfft=None,
+                                              detrend=False, return_onesided=True, boundary='zeros', padded=False,
+                                              axis=-1, scaling='spectrum')
 
     def saveSTFT(self, path: str = './'):
-        plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=4)
+        plt.figure(figsize=(10, 6))  # 增加图像大小以提高清晰度
+        plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
         # plt.colorbar()
         # plt.title(self.title + '_STFT')
         # plt.ylabel('frequency')
         # plt.xlabel('time')
+        # plt.yscale('log')  # 使用对数刻度来增强低频特征的可视化
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
@@ -53,13 +55,19 @@ class MyPlot:
         # plt.show()
 
     def showSTFT(self):
-        plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=4)
-        plt.colorbar()
-        plt.title(self.title + '_STFT')
-        plt.ylabel('frequency')
-        plt.xlabel('time')
+        plt.figure(figsize=(10, 6))  # 增加图像大小以提高清晰度
+        plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
+        # plt.colorbar()
+        # plt.title(self.title + '_STFT')
+        # plt.ylabel('frequency')
+        # plt.xlabel('time')
+        # plt.yscale('log')  # 使用对数刻度来增强低频特征的可视化
+        plt.xticks([])
+        plt.yticks([])
         plt.tight_layout()
+        plt.savefig(self.title + '_stft.png', pad_inches=0, bbox_inches='tight')
         plt.show()
+        plt.close()
 
     def saveWaveform(self, path: str = './'):  # 保存波形图
         plt.plot(self.t, self.f)
@@ -82,7 +90,7 @@ class MyPlot:
 
 
 if __name__ == '__main__':
-    plot = MyPlot(np.random.randn(1024), 'test')
+    plot = MyPlot(np.random.randn(5120), 'test')
     # plot.saveSTFT()
     plot.showSTFT()
 

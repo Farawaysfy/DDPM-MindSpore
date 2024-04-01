@@ -58,7 +58,7 @@ class Signal:
         slices = []
         for label in self.data.index:
             temp = []
-            savePath = self.path.replace('.mat', '') + '\\' + "stft" + '\\' + label.replace('/', '_')
+            savePath = self.path.replace('.mat', '') + '\\' + "stft" + str(self.fs) + '\\' + label.replace('/', '_')
 
             if not os.path.exists(savePath):
                 os.makedirs(savePath)
@@ -133,7 +133,7 @@ class Dataset:
             dirs = os.listdir(root)[-3:]
             length = len(os.listdir(os.path.join(root, dirs[0])))
 
-            for i in range(length):
+            for i in tqdm(range(length), desc="正在合并" + path + "的图像"):
                 img1 = cv2.imread(os.path.join(path, dirs[0], os.listdir(os.path.join(root, dirs[0]))[i]))
                 img2 = cv2.imread(os.path.join(path, dirs[1], os.listdir(os.path.join(root, dirs[1]))[i]))
                 img3 = cv2.imread(os.path.join(path, dirs[2], os.listdir(os.path.join(root, dirs[2]))[i]))
@@ -161,10 +161,10 @@ def get_img_shape():
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data')
+    dataSet = Signals('../data', 5120)
     dataSet.saveSTFT()
     # print(dataSet.df)
     # print(dataSet.df[0])
-    # dataset = Dataset('../data', (1, 256, 256), 32, 'stft')
+    dataset = Dataset('../data', (1, 256, 256), 32, 'stft')
     # print(dataset.paths)
-    # dataset.process()
+    dataset.process()
