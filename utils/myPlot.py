@@ -47,8 +47,9 @@ class MyPlot:
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
-        plt.savefig(path + self.title + '_stft.png')
+        plt.savefig(path + self.title + '_stft.png', pad_inches=0, bbox_inches='tight')
         plt.close()
+        return path + self.title + '_stft.png'
         # plt.show()
 
     def showSTFT(self):
@@ -68,7 +69,7 @@ class MyPlot:
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
-        plt.savefig(path + self.title + '_waveform.png')
+        plt.savefig(path + self.title + '_waveform.png', pad_inches=0, bbox_inches='tight')
         plt.close()
 
     def showWaveform(self):

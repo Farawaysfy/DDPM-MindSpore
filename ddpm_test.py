@@ -16,7 +16,8 @@ diffusion = ddpm.GaussianDiffusion(
 
 trainer = ddpm.Trainer(
     diffusion,
-    "C:\\Users\\Administrator\\PycharmProjects\\DDPM\\datasets\\test",
+    # "C:\\Users\\Administrator\\PycharmProjects\\DDPM\\datasets\\test",
+    'data/Aligned_1_15Hz20Load20190427183859/stft/TimeData_Motor_R_y',
     train_batch_size=1,
     train_lr=8e-5,
     train_num_steps=101,  # total training steps
