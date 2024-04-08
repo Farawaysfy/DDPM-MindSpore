@@ -11,8 +11,8 @@ import einops
 
 from utils.dataset import get_dataloader, get_img_shape
 
-batch_size = 512
-n_epochs = 100
+batch_size = 32
+n_epochs = 500
 
 
 def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth'):

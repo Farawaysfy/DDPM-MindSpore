@@ -3,11 +3,15 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
+import torch
 from pandas import DataFrame
 from scipy.io import loadmat
+from torch.utils.data import DataLoader
+from torchvision.transforms import Compose, ToTensor, Lambda
 from tqdm import tqdm
 
 from utils.myPlot import MyPlot
+from torch.utils.data import Dataset
 
 
 class Signal:
@@ -100,19 +104,10 @@ class Signals:
             signal.saveSTFT()
 
 
-class Dataset:
+class PictureData(Dataset):
 
     def __init__(self, path, shape, batch_size: int, dataType: str):
-        dic = {
-            'Aligned': 0,
-            'Bearing': 1,
-            'Bowed': 2,
-            'Broken': 3,
-            'Normal': 4,
-            'Parallel': 5,
-            'SWF': 6,
-            'Unbalance': 7,
-        }
+
         self.shape = shape
         self.batch_size = batch_size
         self.dataType = dataType
@@ -121,6 +116,7 @@ class Dataset:
             for name in dirs:
                 if dataType in name:
                     self.paths.append(os.path.join(root, name))
+        self.data_tensor, self.target_tensor = self.getDataSet()
 
         # self.dataSet = self.getDataSet()
 
@@ -145,26 +141,68 @@ class Dataset:
                     os.makedirs(savePath)
                 cv2.imwrite(savePath + '\\' + str(i) + '.png', img)
 
-
-
     def getDataSet(self):
-        pass
+        dic = {
+            'Aligned': 0,
+            'Bearing': 1,
+            'Bowed': 2,
+            'Broken': 3,
+            'Normal': 4,
+            'Parallel': 5,
+            'SWF': 6,
+            'Unbalance': 7,
+        }
+        data = []
+        target = []
+        for path in self.paths:
+            label = -1
+            for key in dic:
+                if key in path:
+                    label = dic[key]
+                    break
+            root = path
+            # 获取所有png
+            files = os.listdir(root)
+            for file in files:
+                if not file.endswith('.png'):
+                    continue
+                img = cv2.imread(os.path.join(root, file))
+                img = cv2.resize(img, self.shape[1:])
+                # 将img由三通道转换为单通道
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+                # 将img转换为tensor
+                img = torch.tensor(img, dtype=torch.float32)
+                img = torch.reshape(img, (1, *self.shape[1:]))
+                data.append(img)
+                # 获取标签
+                target.append(label)
+        data = torch.stack(data)
+        return data, target
+
+    def __len__(self):
+        return self.data_tensor.size(0)
+
+    def __getitem__(self, idx):
+        return self.data_tensor[idx], self.target_tensor[idx]
 
 
 def get_dataloader(batch_size: int):
-    pass
+    transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
+    dataset = PictureData('F:\\yjs\\ml\\DDPM-MindSpore\\data', get_img_shape(), batch_size, 'stft')
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
 def get_img_shape():
-    return 1, 256, 256
+    return 1, 56, 56
 
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data', 5120)
-    dataSet.saveSTFT()
+    # dataSet = Signals('../data', 5120)
+    # dataSet.saveSTFT()
     # print(dataSet.df)
     # print(dataSet.df[0])
-    dataset = Dataset('../data', (1, 256, 256), 32, 'stft')
+    dataset = PictureData('../data', get_img_shape(), 32, 'stft')
     # print(dataset.paths)
-    dataset.process()
+    dataset.getDataSet()
