@@ -3,6 +3,8 @@ import time
 
 import torch
 import torch.nn as nn
+from tqdm import tqdm
+
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg
 import cv2
@@ -11,7 +13,7 @@ import einops
 
 from utils.dataset import get_dataloader, get_img_shape
 
-batch_size = 32
+batch_size = 64
 n_epochs = 500
 
 
@@ -27,7 +29,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth'):
     for e in range(n_epochs):
         total_loss = 0
 
-        for x, _ in dataloader:
+        for x, _ in tqdm(dataloader, desc='Epoch {}'.format(e)):
             current_batch_size = x.shape[0]
             x = x.to(device)
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from matplotlib.pyplot import plot
 from pandas import DataFrame
 from scipy.io import loadmat
 from torch.utils.data import DataLoader
@@ -166,11 +167,32 @@ class PictureData(Dataset):
             for file in files:
                 if not file.endswith('.png'):
                     continue
-                img = cv2.imread(os.path.join(root, file))
-                img = cv2.resize(img, self.shape[1:])
-                # 将img由三通道转换为单通道
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                # 导入 opencvimport cv2
+                # 读入原始图像，使用 cv2.IMREAD_UNCHANGED
+                # img = cv2.imread("gray_img.jpg", cv2.IMREAD_UNCHANGED)
+                # 查看原始图像
+                # shape = img.shape
+                # print(shape)
+                # img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+                # print(img_color.shape)
+                # 查看转换后图像通道
+                # cv2.imshow('color_img', img_color)
+                # cv2.imshow("image", img)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+                img = cv2.imread(os.path.join(root, file), cv2.IMREAD_UNCHANGED)
+                # cv2.imshow('img', img)
+                # cv2.waitKey(0)
+                # print("size: ", img.shape)
 
+                if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
+                    # 将img由三通道转换为单通道
+                    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                img = cv2.resize(img, self.shape[1:])
+                # cv2.imshow('gray', img)
+                # # 显示当前图像
+                # cv2.waitKey(0)
+                # print("gray size: ", img.shape)
                 # 将img转换为tensor
                 img = torch.tensor(img, dtype=torch.float32)
                 img = torch.reshape(img, (1, *self.shape[1:]))
@@ -189,12 +211,12 @@ class PictureData(Dataset):
 
 def get_dataloader(batch_size: int):
     transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
-    dataset = PictureData('F:\\yjs\\ml\\DDPM-MindSpore\\data', get_img_shape(), batch_size, 'stft')
+    dataset = PictureData('E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data', get_img_shape(), batch_size, 'stft')
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
 def get_img_shape():
-    return 1, 56, 56
+    return 1, 512, 512
 
 
 if __name__ == '__main__':
