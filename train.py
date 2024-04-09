@@ -41,6 +41,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             eps = torch.randn_like(x).to(device)
             x_t = ddpm.sample_forward(x, t, eps)
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
+            # writer.add_scalar('loss', loss_fn(eps))
             loss = loss_fn(eps_theta, eps)
             optimizer.zero_grad()
             loss.backward()
@@ -48,6 +49,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             total_loss += loss.item() * current_batch_size
             writer.add_scalar('loss', loss.item(), e)
         total_loss /= len(dataloader.dataset)
+        writer.add_scalar('epochs loss', total_loss, e)
         toc = time.time()
         torch.save(net.state_dict(), ckpt_path)
         print(f'epoch {e} loss: {total_loss} elapsed {(toc - tic):.2f}s')

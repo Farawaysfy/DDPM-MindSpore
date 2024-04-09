@@ -17,9 +17,10 @@ from torch.utils.data import Dataset
 
 
 class Signal:
-    def __init__(self, path,fs=5120, slice_length=1024):
+    def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut'):
         self.path = path
         self.slice_length = slice_length
+        self.slice_type = slice_type
         self.fs = fs
         dic = {
             'Aligned': 0,
@@ -46,15 +47,23 @@ class Signal:
         dataLabels = [v[0][0] for v in rawData['data'][0]]
         data = [[v[1].T[0]] for v in rawData['data'][0]]
         # print("data[0]=", data[0])
-        slicesLabels = [str(self.label) + "_" + str(i) for i in range(len(data[0][0]) // self.slice_length)]  # 生成切片标签
         slices = []
-        for v in data:  # 切片
-            temp = []
-            for i in range(len(v[0]) // self.slice_length):
-                temp.append(np.array(v[0][i * self.slice_length:(i + 1) * self.slice_length]))
-            slices.append(temp)
+        if self.slice_type == 'cut':
+            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(data[0][0]) // self.slice_length)]  # 生成切片标签
+            for v in data:  # 切片
+                temp = []
+                for i in range(len(v[0]) // self.slice_length):
+                    temp.append(np.array(v[0][i * self.slice_length:(i + 1) * self.slice_length]))
+                slices.append(temp)
+        else:
+            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(data[0][0]) - self.slice_length)]
+            for v in data:
+                temp = []
+                for i in range(len(v[0]) - self.slice_length):
+                    temp.append(np.array(v[0][i:i+self.slice_length]))
+                slices.append(temp)
         # print("dataLabels=", dataLabels)
-        df = DataFrame(slices, index=dataLabels, columns=slicesLabels, )
+        df = DataFrame(slices, index=dataLabels, columns=slices_labels, )
         # print("df=", df)
         return df
 
@@ -65,7 +74,8 @@ class Signal:
         slices = []
         for label in self.data.index:
             temp = []
-            savePath = self.path.replace('.mat', '') + '\\' + "stft" + str(self.slice_length) + '\\' + label.replace('/', '_')
+            savePath = self.path.replace('.mat', '') + '\\' + "stft" + str(self.slice_length) + '\\' + label.replace(
+                '/', '_')
 
             if not os.path.exists(savePath):
                 os.makedirs(savePath)
@@ -94,9 +104,13 @@ class Signal:
 
 
 class Signals:
-    def __init__(self, path, fs=1024, slice_length=512):
+    def __init__(self, path, fs=1024, slice_length=512, slice_type='cut'):
         paths = [path + '\\' + f for f in os.listdir(path) if f.endswith('.mat')]  # 获取所有.mat文件
-        self.signals = [Signal(path, fs, slice_length) for path in paths]  # 读取所有.mat文件
+        if slice_type == 'cut':
+            print("当前信号分割模式为切片式（不重复）")
+        else:
+            print("当前信号分割模式为窗口式（重复）")
+        self.signals = [Signal(path, fs, slice_length, slice_type) for path in paths]  # 读取所有.mat文件
         self.labels = [signal.label for signal in self.signals]  # 获取所有信号的标签
         self.df = self.signals[0].data  # 初始化DataFrame
         for i in range(1, len(self.signals)):  # 合并所有信号的数据
