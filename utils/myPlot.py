@@ -31,10 +31,11 @@ import matplotlib.pyplot as plt
 # 计算STFT的轴; 默认值超过最后一个轴(即axis=-1)。
 
 class MyPlot:
-    def __init__(self, data: np.ndarray, title: str):
-        fs = len(data)
+    def __init__(self, data: np.ndarray, title: str, fs=5120):
         self.title = title
-        self.f, self.t, self.nd = signal.stft(data, fs=fs, window='hann', nperseg=1024, noverlap=768, nfft=None,
+        nperseg = len(data)
+        noverlap = int(nperseg / 4 * 3)
+        self.f, self.t, self.nd = signal.stft(data, fs=fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
                                               detrend=False, return_onesided=True, boundary='zeros', padded=False,
                                               axis=-1, scaling='spectrum')
 

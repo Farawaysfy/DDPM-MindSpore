@@ -3,6 +3,7 @@ import time
 
 import torch
 import torch.nn as nn
+from torchsummary import summary
 from tqdm import tqdm
 
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
@@ -12,15 +13,19 @@ import numpy as np
 import einops
 
 from utils.dataset import get_dataloader, get_img_shape
+from torch.utils.tensorboard import SummaryWriter
 
 batch_size = 64
 n_epochs = 500
 
 
-def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth'):
+def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
+          path='E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data'):
     print('batch size:', batch_size)
+
+    writer = SummaryWriter(log_dir='./run', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
-    dataloader = get_dataloader(batch_size)
+    dataloader = get_dataloader(path, batch_size, 512)
     net = net.to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), 1e-3)
@@ -41,6 +46,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth'):
             loss.backward()
             optimizer.step()
             total_loss += loss.item() * current_batch_size
+            writer.add_scalar('loss', loss.item(), e)
         total_loss /= len(dataloader.dataset)
         toc = time.time()
         torch.save(net.state_dict(), ckpt_path)
@@ -85,12 +91,13 @@ if __name__ == '__main__':
     config_id = 4
     device = 'cuda'
     model_path = './model/model_unet_res.pth'
+    data_path = './data'
 
     config = configs[config_id]
     net = build_network(config, n_steps)
     ddpm = DDPM(device, n_steps)
 
-    train(ddpm, net, device=device, ckpt_path=model_path)
+    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path)
 
     net.load_state_dict(torch.load(model_path))
-    sample_imgs(ddpm, net, 'work_dirs/diffusion.jpg', device=device)
+    sample_imgs(ddpm, net, 'work_dirs/diffusion.png', device=device)
