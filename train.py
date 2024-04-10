@@ -22,7 +22,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
           path='E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data', slice_length=512):
     print('batch size:', batch_size)
 
-    writer = SummaryWriter(log_dir='./run/04102105', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04102130', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     dataloader = get_dataloader(path, batch_size, slice_length)
     net = net.to(device)
@@ -41,13 +41,16 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             writer.add_image('origin', img_to_write, i, dataformats='HWC')  # tensor的形状是CHW, 对应的是channel, height, width
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布
+
+            eps_img = tensor2img(eps[0])
+            writer.add_image('eps', eps_img, i, dataformats='HWC')
             x_t = ddpm.sample_forward(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始图片加噪声
             #  写入加噪声的图片
             x_t_img = tensor2img(x_t[0])
             writer.add_image('add_noise', x_t_img, i, dataformats='HWC')
 
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
-            # 生成一个eps_theta, eps_theta是x_t的一个前向样本
+            # 生成一个eps_theta, eps_theta是x_t的一个前向样本,预测噪声
             #  写入处理完的图片
             eps_theta_img = tensor2img(eps_theta[0])
 
