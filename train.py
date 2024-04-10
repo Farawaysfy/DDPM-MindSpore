@@ -25,7 +25,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
     writer = SummaryWriter(log_dir='./run', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
-    dataloader = get_dataloader(path, batch_size, 512)
+    dataloader = get_dataloader(path, batch_size)
     net = net.to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), 1e-3)
@@ -102,4 +102,4 @@ if __name__ == '__main__':
     train(ddpm, net, device=device, ckpt_path=model_path, path=data_path)
 
     net.load_state_dict(torch.load(model_path))
-    sample_imgs(ddpm, net, 'work_dirs/diffusion.png', device=device)
+    sample_imgs(ddpm, net, 'work_dirs/diffusion.png', 1, device=device)

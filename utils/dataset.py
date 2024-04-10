@@ -49,7 +49,8 @@ class Signal:
         # print("data[0]=", data[0])
         slices = []
         if self.slice_type == 'cut':
-            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(data[0][0]) // self.slice_length)]  # 生成切片标签
+            slices_labels = [str(self.label) + "_" + str(i) for i in
+                             range(len(data[0][0]) // self.slice_length)]  # 生成切片标签
             for v in data:  # 切片
                 temp = []
                 for i in range(len(v[0]) // self.slice_length):
@@ -59,8 +60,11 @@ class Signal:
             slices_labels = [str(self.label) + "_" + str(i) for i in range(len(data[0][0]) - self.slice_length)]
             for v in data:
                 temp = []
-                for i in range(len(v[0]) - self.slice_length):
-                    temp.append(np.array(v[0][i:i+self.slice_length]))
+                left, right = 0, self.slice_length
+                while right < len(v[0]):  # 信号重合度为0.5
+                    temp.append(np.array(v[0][left:right]))
+                    left += self.slice_length // 2
+                    right += self.slice_length // 2
                 slices.append(temp)
         # print("dataLabels=", dataLabels)
         df = DataFrame(slices, index=dataLabels, columns=slices_labels, )
@@ -92,10 +96,6 @@ class Signal:
                 temp.append(plot.saveSTFT(path=savePath + '\\'))
 
                 # print("现在处理的图像为：", temp[-1])
-                # 读取STFT图像
-                # img = cv2.imread(temp[-1])
-                # img = cv2.resize(img, (256, 256))
-                # print("img=", img)
             slices.append(temp)
         return DataFrame(slices, index=stftLabels, columns=slicesLabels)
 
@@ -123,7 +123,7 @@ class Signals:
 
 class PictureData(VisionDataset):
 
-    def __init__(self, path, shape, batch_size: int, data_type: str, slice_length=512, transform=None):
+    def __init__(self, path, shape, batch_size: int, data_type: str, slice_length=512, transform=None, merged=True):
         if transform is None:
             transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
         super().__init__(transform=transform)
@@ -135,6 +135,7 @@ class PictureData(VisionDataset):
             for name in dirs:
                 if data_type in name and name.endswith(str(slice_length)):
                     self.paths.append(os.path.join(root, name))
+        self.merged = merged
         self.data_tensor, self.target_tensor = self.getDataSet()
 
         # self.dataSet = self.getDataSet()
@@ -157,6 +158,9 @@ class PictureData(VisionDataset):
                 if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
                     # 将img由三通道转换为单通道
                     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                # img黑白颜色调换
+
+                img = 255 - img
                 img = cv2.resize(img, self.shape[1:])
 
                 # cv2.imshow("img", img)
@@ -188,30 +192,59 @@ class PictureData(VisionDataset):
             root = path
             # 获取所有png
             files = os.listdir(root)
-            for file in files:
-                if not file.endswith('.png'):
-                    continue
+            if self.merged:  # 使用合并的图片
+                for file in files[:-3]:
+                    if not file.endswith('.png'):
+                        continue
+                    img = cv2.imread(os.path.join(root, file), cv2.IMREAD_UNCHANGED)
+                    # cv2.imshow('img', img)
+                    # cv2.waitKey(0)
+                    # print("size: ", img.shape)
 
-                img = cv2.imread(os.path.join(root, file), cv2.IMREAD_UNCHANGED)
-                # cv2.imshow('img', img)
-                # cv2.waitKey(0)
-                # print("size: ", img.shape)
+                    # if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
+                    #     # 将img由三通道转换为单通道
+                    #     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                    if img.shape[1:] != self.shape[1:]:
+                        img = cv2.resize(img, self.shape[1:])
+                    # cv2.imshow('gray', img)
+                    # # 显示当前图像
+                    # cv2.waitKey(0)
+                    # print("gray size: ", img.shape)
 
-                # if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
-                #     # 将img由三通道转换为单通道
-                #     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                if img.shape[1:] != self.shape[1:]:
-                    img = cv2.resize(img, self.shape[1:])
-                # cv2.imshow('gray', img)
-                # # 显示当前图像
-                # cv2.waitKey(0)
-                # print("gray size: ", img.shape)
-                # 将img转换为tensor
-                img = torch.tensor(img, dtype=torch.float32)
-                img = torch.reshape(img, (1, *self.shape[1:]))
-                data.append(img)
-                # 获取标签
-                target.append(label)
+                    # 将img转换为tensor
+                    img = torch.tensor(img, dtype=torch.float32)
+                    img = torch.reshape(img, (1, *self.shape[1:]))
+                    data.append(img)
+                    # 获取标签
+                    target.append(label)
+            else:  # 使用单独的图片
+                for file in files[-3:]:
+                    for _, _, sub_files in os.walk(os.path.join(root, file)):
+                        for sub_file in sub_files:
+                            img = cv2.imread(os.path.join(root, file, sub_file), cv2.IMREAD_UNCHANGED)
+                            cv2.imshow('img', img)
+                            cv2.waitKey(0)
+                            print("size: ", img.shape)
+
+                            if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
+                                # 将img由三通道转换为单通道
+                                img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                            if img.shape[1:] != self.shape[1:]:
+                                img = cv2.resize(img, self.shape[1:])
+                            cv2.imshow('gray', img)
+                            # 显示当前图像
+                            cv2.waitKey(0)
+                            print("gray size: ", img.shape)
+
+                            img = 255 - img
+                            cv2.imshow('dst', img)
+                            cv2.waitKey(0)
+                            # 将img转换为tensor
+                            img = torch.tensor(img, dtype=torch.float32)
+                            img = torch.reshape(img, (1, *self.shape[1:]))
+                            data.append(img)
+                            # 获取标签
+                            target.append(label)
         data = torch.stack(data)
         return data, target
 
@@ -222,10 +255,10 @@ class PictureData(VisionDataset):
         return self.data_tensor[idx], self.target_tensor[idx]
 
 
-def get_dataloader(path, batch_size: int, slice_length: int) -> DataLoader:
+def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
     transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
     dataset = PictureData(path, get_img_shape(), batch_size,
-                          'stft', slice_length=slice_length, transform=transform)
+                          'stft', slice_length=slice_length, transform=transform, merged=False)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
@@ -239,7 +272,7 @@ if __name__ == '__main__':
     # dataSet.saveSTFT()
     # print(dataSet.df)
     # print(dataSet.df[0])
-    dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=512)
-    dataset.process()
+    dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=512, merged=False)
+    # dataset.process()
     # print(dataset.paths)
     # dataset.getDataSet()
