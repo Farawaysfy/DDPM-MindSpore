@@ -12,7 +12,7 @@ from torchvision.datasets import VisionDataset
 from torchvision.transforms import Compose, ToTensor, Lambda
 from tqdm import tqdm
 
-from utils.myPlot import MyPlot
+from utils.myPlot import MyPlot, processImg
 from torch.utils.data import Dataset
 
 
@@ -155,16 +155,6 @@ class PictureData(VisionDataset):
                 img3 = cv2.imread(os.path.join(path, dirs[2], os.listdir(os.path.join(root, dirs[2]))[i]))
                 img = np.vstack((img1, img2, img3))
 
-                if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
-                    # 将img由三通道转换为单通道
-                    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                # img黑白颜色调换
-
-                img = 255 - img
-                img = cv2.resize(img, self.shape[1:])
-
-                # cv2.imshow("img", img)
-                # cv2.waitKey(0)
                 # 保存合并后的图像
                 if not os.path.exists(path):
                     os.makedirs(path)
@@ -197,19 +187,7 @@ class PictureData(VisionDataset):
                     if not file.endswith('.png'):
                         continue
                     img = cv2.imread(os.path.join(root, file), cv2.IMREAD_UNCHANGED)
-                    # cv2.imshow('img', img)
-                    # cv2.waitKey(0)
-                    # print("size: ", img.shape)
-
-                    # if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
-                    #     # 将img由三通道转换为单通道
-                    #     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                    if img.shape[1:] != self.shape[1:]:
-                        img = cv2.resize(img, self.shape[1:])
-                    # cv2.imshow('gray', img)
-                    # # 显示当前图像
-                    # cv2.waitKey(0)
-                    # print("gray size: ", img.shape)
+                    img = processImg(self.shape, img)
 
                     # 将img转换为tensor
                     img = torch.tensor(img, dtype=torch.float32)
@@ -222,23 +200,12 @@ class PictureData(VisionDataset):
                     for _, _, sub_files in os.walk(os.path.join(root, file)):
                         for sub_file in sub_files:
                             img = cv2.imread(os.path.join(root, file, sub_file), cv2.IMREAD_UNCHANGED)
-                            cv2.imshow('img', img)
-                            cv2.waitKey(0)
-                            print("size: ", img.shape)
-
-                            if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
-                                # 将img由三通道转换为单通道
-                                img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                            if img.shape[1:] != self.shape[1:]:
-                                img = cv2.resize(img, self.shape[1:])
-                            cv2.imshow('gray', img)
-                            # 显示当前图像
-                            cv2.waitKey(0)
-                            print("gray size: ", img.shape)
-
-                            img = 255 - img
-                            cv2.imshow('dst', img)
-                            cv2.waitKey(0)
+                            # cv2.imshow('img', img)
+                            # cv2.waitKey(0)
+                            img = processImg(self.shape, img)
+                            # cv2.imshow('processed', img)
+                            # cv2.waitKey(0)
+                            # cv2.destroyAllWindows()
                             # 将img转换为tensor
                             img = torch.tensor(img, dtype=torch.float32)
                             img = torch.reshape(img, (1, *self.shape[1:]))
@@ -263,7 +230,7 @@ def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
 
 
 def get_img_shape():
-    return 1, 512, 512
+    return 1, 128, 128
 
 
 if __name__ == '__main__':
