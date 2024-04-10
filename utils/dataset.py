@@ -210,9 +210,8 @@ class PictureData(VisionDataset):
         original_img = cv2.imread(self.data_path[idx], cv2.IMREAD_COLOR)  # 读取原始图像, 格式为RGB
 
         img = tensor2img(self.data_tensor[idx])  # 将tensor转换为numpy, 格式为BRG
-
         cv2.imshow('original_img', original_img)
-        cv2.imshow('img', img.transpose(1, 2, 0))
+        cv2.imshow('img', img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -220,9 +219,8 @@ class PictureData(VisionDataset):
 def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
     tensor = tensor.detach().to('cpu')  # Detach tensor before converting to numpy
     img = tensor.numpy()
-    if len(img.shape) == 3:
-        img = np.transpose(img, (1, 2, 0))
-    img = img * 255
+    if img.shape[0] == 3 or img.shape[0] == 4:  # 彩色图像, 通道数为3或4, 通道顺序为RGB或RGBA
+        img = np.transpose(img, (1, 2, 0))  # CHW -> HWC
     return img.astype(np.uint8)
 
 
