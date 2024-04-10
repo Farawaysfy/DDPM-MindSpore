@@ -41,7 +41,7 @@ class MyPlot:
                                               axis=-1, scaling='spectrum')
 
     def saveSTFT(self, path: str = './'):
-        plt.figure(figsize=(10, 6))  # 增加图像大小以提高清晰度
+        plt.figure(figsize=(10, 10))  # 增加图像大小以提高清晰度
         plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
         # plt.colorbar()
         # plt.title(self.title + '_STFT')
@@ -51,7 +51,7 @@ class MyPlot:
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
-        plt.savefig(path + self.title + '_stft.png', pad_inches=0, bbox_inches='tight')
+        plt.savefig(path + self.title + '_stft.png', pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
         return path + self.title + '_stft.png'
         # plt.show()
@@ -59,15 +59,11 @@ class MyPlot:
     def showSTFT(self):
         plt.figure(figsize=(10, 6))  # 增加图像大小以提高清晰度
         plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
-        # plt.colorbar()
-        # plt.title(self.title + '_STFT')
-        # plt.ylabel('frequency')
-        # plt.xlabel('time')
-        # plt.yscale('log')  # 使用对数刻度来增强低频特征的可视化
-        plt.xticks([])
-        plt.yticks([])
-        plt.tight_layout()
-        plt.savefig(self.title + '_stft.png', pad_inches=0, bbox_inches='tight')
+        plt.colorbar()
+        plt.title(self.title + '_STFT')
+        plt.ylabel('frequency')
+        plt.xlabel('time')
+        plt.yscale('log')  # 使用对数刻度来增强低频特征的可视化
         plt.show()
         plt.close()
 
@@ -79,7 +75,7 @@ class MyPlot:
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
-        plt.savefig(path + self.title + '_waveform.png', pad_inches=0, bbox_inches='tight')
+        plt.savefig(path + self.title + '_waveform.png', pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
 
     def showWaveform(self):
@@ -104,21 +100,9 @@ def processImg(shape, img):
         img = cv2.resize(img, shape[1:])
     # 改变图像大小
     # cv2.imshow('resize', img)
-    # 显示当前图像
+    # # 显示当前图像
     # cv2.waitKey(0)
-    # print("gray size: ", img.shape)
-
-    # img = 255 - img
-    # cv2.imshow('dst', img)
-    #图像反色
-    # cv2.waitKey(0)
-    # # 对图像进行自适应直方图均衡化
-    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    # img = clahe.apply(img)
-
-    # 显示增加了对比度的图像
-    # cv2.imshow('Contrast', img)
-    # cv2.waitKey(0)
+    #
     # cv2.destroyAllWindows()
     return img
 
@@ -129,8 +113,8 @@ def recoverImg(shape, img):
     # cv2.waitKey(0)
     pass
 
+
 if __name__ == '__main__':
     plot = MyPlot(np.random.randn(5120), 'test')
     # plot.saveSTFT()
     plot.showSTFT()
-

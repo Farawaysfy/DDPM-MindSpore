@@ -7,6 +7,7 @@ import torch
 from matplotlib.pyplot import plot
 from pandas import DataFrame
 from scipy.io import loadmat
+from torch import float32
 from torch.utils.data import DataLoader
 from torchvision.datasets import VisionDataset
 from torchvision.transforms import Compose, ToTensor, Lambda
@@ -92,10 +93,8 @@ class Signal:
             for column in tqdm(self.data.columns, desc="正在处理" + savePath + "的STFT图像"):
                 data = self.data.loc[label, column]
                 plot = MyPlot(data, column, fs=self.fs)
-
                 temp.append(plot.saveSTFT(path=savePath + '\\'))
 
-                # print("现在处理的图像为：", temp[-1])
             slices.append(temp)
         return DataFrame(slices, index=stftLabels, columns=slicesLabels)
 
@@ -126,7 +125,7 @@ class PictureData(VisionDataset):
     def __init__(self, path, shape, batch_size: int, data_type: str, slice_length=512, transform=None, merged=True):
         if transform is None:
             transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
-        super().__init__(transform=transform)
+        super().__init__(root=path, transform=transform)
         self.shape = shape
         self.batch_size = batch_size
         self.data_type = data_type
@@ -136,7 +135,7 @@ class PictureData(VisionDataset):
                 if data_type in name and name.endswith(str(slice_length)):
                     self.paths.append(os.path.join(root, name))
         self.merged = merged
-        self.data_tensor, self.target_tensor = self.getDataSet()
+        self.data_tensor, self.target_tensor, self.data_path = self.getDataSet()
 
         # self.dataSet = self.getDataSet()
 
@@ -173,6 +172,7 @@ class PictureData(VisionDataset):
         }
         data = []
         target = []
+        data_path = []
         for path in self.paths:
             label = next((dic[key] for key in dic if key in path), -1)
             files = os.listdir(path)
@@ -184,19 +184,46 @@ class PictureData(VisionDataset):
                              for sub_file in sub_files]
 
             for file in png_files:
-                img = cv2.imread(os.path.join(path, file), cv2.IMREAD_UNCHANGED)
-                img = processImg(self.shape, img)
-                img_tensor = torch.tensor(img, dtype=torch.float32).reshape((self.shape[0], self.shape[1], self.shape[2]))
+                img = cv2.imread(os.path.join(path, file), cv2.IMREAD_COLOR)
+                img = processImg(self.shape, img)  # 处理图像, 使其符合shape
+                img_tensor = torch.tensor(img, dtype=float32)  # 将numpy转换为tensor
+                img_tensor = img_tensor.permute(2, 0, 1)
+
+                # ndarr = img_tensor.numpy()
+                # cv2.imshow('original_img', img)
+                # cv2.imshow('img', ndarr)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
                 data.append(img_tensor)
                 target.append(label)
+                data_path.append(os.path.join(path, file))
         data = torch.stack(data)
-        return data, target
+        return data, target, data_path
 
     def __len__(self):
         return self.data_tensor.size(0)
 
     def __getitem__(self, idx):
         return self.data_tensor[idx], self.target_tensor[idx]
+
+    def showFigure(self, idx):
+        original_img = cv2.imread(self.data_path[idx], cv2.IMREAD_COLOR)  # 读取原始图像, 格式为RGB
+
+        img = tensor2img(self.data_tensor[idx])  # 将tensor转换为numpy, 格式为BRG
+
+        cv2.imshow('original_img', original_img)
+        cv2.imshow('img', img.transpose(1, 2, 0))
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
+    tensor = tensor.detach().to('cpu')  # Detach tensor before converting to numpy
+    img = tensor.numpy()
+    if len(img.shape) == 3:
+        img = np.transpose(img, (1, 2, 0))
+    img = img * 255
+    return img.astype(np.uint8)
 
 
 def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
@@ -207,16 +234,17 @@ def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
 
 
 def get_img_shape():  # 获取图像的形状
-    return 4, 128, 128
+    return 3, 256, 256
 
 
 if __name__ == '__main__':
     print('test')
-    # dataSet = Signals('../data', slice_length=512)
+    # dataSet = Signals('../data', slice_length=5120)
     # dataSet.saveSTFT()
     # print(dataSet.df)
     # print(dataSet.df[0])
-    dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=512, merged=False)
+    dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)
+    dataset.showFigure(0)
     # dataset.process()
     # print(dataset.paths)
     # dataset.getDataSet()
