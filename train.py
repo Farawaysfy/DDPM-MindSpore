@@ -47,13 +47,13 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             writer.add_image('add_noise', x_t_img, i, dataformats='HWC')
 
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
-            # 生成一个eps_theta, eps_theta是x_t的一个前向样本，相当于给加噪声的图片去噪声？
+            # 生成一个eps_theta, eps_theta是x_t的一个前向样本
             #  写入处理完的图片
             eps_theta_img = tensor2img(eps_theta[0])
 
             writer.add_image('eps_theta', eps_theta_img, i, dataformats='HWC')
 
-            loss = loss_fn(eps_theta, eps)
+            loss = loss_fn(eps_theta, eps)  # 计算eps_theta和eps的损失
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
