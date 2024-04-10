@@ -174,44 +174,21 @@ class PictureData(VisionDataset):
         data = []
         target = []
         for path in self.paths:
-            label = -1
-            for key in dic:
-                if key in path:
-                    label = dic[key]
-                    break
-            root = path
-            # 获取所有png
-            files = os.listdir(root)
-            if self.merged:  # 使用合并的图片
-                for file in files[:-3]:
-                    if not file.endswith('.png'):
-                        continue
-                    img = cv2.imread(os.path.join(root, file), cv2.IMREAD_UNCHANGED)
-                    img = processImg(self.shape, img)
+            label = next((dic[key] for key in dic if key in path), -1)
+            files = os.listdir(path)
+            if self.merged:
+                png_files = [file for file in files[:-3] if file.endswith('.png')]
+            else:
+                png_files = [os.path.join(file, sub_file) for file in files[-3:]
+                             for _, _, sub_files in os.walk(os.path.join(path, file))
+                             for sub_file in sub_files]
 
-                    # 将img转换为tensor
-                    img = torch.tensor(img, dtype=torch.float32)
-                    img = torch.reshape(img, (1, *self.shape[1:]))
-                    data.append(img)
-                    # 获取标签
-                    target.append(label)
-            else:  # 使用单独的图片
-                for file in files[-3:]:
-                    for _, _, sub_files in os.walk(os.path.join(root, file)):
-                        for sub_file in sub_files:
-                            img = cv2.imread(os.path.join(root, file, sub_file), cv2.IMREAD_UNCHANGED)
-                            # cv2.imshow('img', img)
-                            # cv2.waitKey(0)
-                            img = processImg(self.shape, img)
-                            # cv2.imshow('processed', img)
-                            # cv2.waitKey(0)
-                            # cv2.destroyAllWindows()
-                            # 将img转换为tensor
-                            img = torch.tensor(img, dtype=torch.float32)
-                            img = torch.reshape(img, (1, *self.shape[1:]))
-                            data.append(img)
-                            # 获取标签
-                            target.append(label)
+            for file in png_files:
+                img = cv2.imread(os.path.join(path, file), cv2.IMREAD_UNCHANGED)
+                img = processImg(self.shape, img)
+                img_tensor = torch.tensor(img, dtype=torch.float32).reshape((self.shape[0], self.shape[1], self.shape[2]))
+                data.append(img_tensor)
+                target.append(label)
         data = torch.stack(data)
         return data, target
 
@@ -229,8 +206,8 @@ def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
-def get_img_shape():
-    return 1, 128, 128
+def get_img_shape():  # 获取图像的形状
+    return 4, 128, 128
 
 
 if __name__ == '__main__':

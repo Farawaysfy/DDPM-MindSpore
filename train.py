@@ -21,7 +21,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
           path='E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data'):
     print('batch size:', batch_size)
 
-    writer = SummaryWriter(log_dir='./run/04101417', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04101520', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     dataloader = get_dataloader(path, batch_size)
     net = net.to(device)
@@ -29,26 +29,28 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
     optimizer = torch.optim.Adam(net.parameters(), 1e-3)
 
     tic = time.time()
+    i = 0
     for e in range(n_epochs):
         total_loss = 0
 
         for x, _ in tqdm(dataloader, desc='Epoch {}'.format(e)):
             current_batch_size = x.shape[0]
             x = x.to(device)
-            writer.add_image('origin', x[0])
+            writer.add_image('origin', x[0], i)
+            # 保存原始图像
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布
             x_t = ddpm.sample_forward(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本
-            writer.add_image('add_noise', x_t[0])
+            writer.add_image('add_noise', x_t[0], i)
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
-            writer.add_image('eps_theta', eps_theta[0])
-            # writer.add_scalar('loss', loss_fn(eps))
+            writer.add_image('eps_theta', eps_theta[0], i)
             loss = loss_fn(eps_theta, eps)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item() * current_batch_size
-            writer.add_scalar('loss', loss.item())
+            writer.add_scalar('step loss', loss.item(), i)
+            i += 1
         total_loss /= len(dataloader.dataset)
         writer.add_scalar('epochs loss', total_loss, e)
         toc = time.time()

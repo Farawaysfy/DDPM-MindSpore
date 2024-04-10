@@ -96,48 +96,41 @@ def processImg(shape, img):
     # cv2.waitKey(0)
     # print("size: ", img.shape)
 
-    if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
-        # 将img由三通道转换为单通道
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
+    #     # 将img由三通道转换为单通道
+    #     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
     if img.shape[1:] != shape[1:]:
         img = cv2.resize(img, shape[1:])
-    # cv2.imshow('gray', img)
-    # # 显示当前图像
+    # 改变图像大小
+    # cv2.imshow('resize', img)
+    # 显示当前图像
     # cv2.waitKey(0)
     # print("gray size: ", img.shape)
 
+    # img = 255 - img
+    # cv2.imshow('dst', img)
+    #图像反色
+    # cv2.waitKey(0)
+    # # 对图像进行自适应直方图均衡化
+    # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    # img = clahe.apply(img)
+
+    # 显示增加了对比度的图像
+    # cv2.imshow('Contrast', img)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    return img
+
+
+def recoverImg(shape, img):
     img = 255 - img
     # cv2.imshow('dst', img)
     # cv2.waitKey(0)
-    # 对图像进行自适应直方图均衡化
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    img_contrast = clahe.apply(img)
-
-    # 显示增加了对比度的图像
-    # cv2.imshow('Contrast', img_contrast)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    return img_contrast
-
+    pass
 
 if __name__ == '__main__':
     plot = MyPlot(np.random.randn(5120), 'test')
     # plot.saveSTFT()
     plot.showSTFT()
 
-    # print('plot stft')
-    # data = np.random.randn(1024)
-    #
-    # fs = 1024  # 采样频率
-    #
-    # f, t, nd = signal.stft(data, fs=fs, window='hann', nperseg=256, noverlap=None, nfft=None,
-    #                        detrend=False, return_onesided=True, boundary='zeros', padded=True, axis=-1)
-    # plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=4)
-    # plt.colorbar()
-    # plt.title('STFT')
-    # plt.ylabel('frequency')
-    # plt.xlabel('time')
-    # plt.tight_layout()
-    # plt.show()
-
-    # plt.savefig('stft.png')
