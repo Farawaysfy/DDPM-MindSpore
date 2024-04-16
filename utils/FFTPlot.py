@@ -89,6 +89,7 @@ class FFTPlot:
         plt.tight_layout()
         plt.savefig(os.path.join(path, self.title + '_waveform.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
+        return os.path.join(path, self.title + '_waveform.png')
 
     def showWaveform(self):
         # 二维时频图
