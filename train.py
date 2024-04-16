@@ -26,7 +26,8 @@ def config_read(config):
     learning_rate = config['lr']
     wd = config['weight_decay']
     seed = config['seed']
-    return batch_size, n_epochs, device, learning_rate, wd, seed
+    shape = config['shape']
+    return batch_size, n_epochs, device, learning_rate, wd, seed, shape
 
 
 # fix seed
@@ -41,14 +42,15 @@ def same_seeds(seed):
 
 
 def train_model(config, dataset):
-    batch_size, n_epochs, device, learning_rate, wd, seed = config_read(config)
+    batch_size, n_epochs, device, learning_rate, wd, seed, shape = config_read(config)
     same_seeds(seed)
-    model = VisionTransformer().to(device)
+    in_c, img_size, _ = shape
+    model = VisionTransformer(img_size=img_size, in_c=in_c).to(device)
     stale = 0
     best_acc = 0
     patience = 300
 
-    train_loader, valid_loader = train_test_split(dataset, test_size=0.2)
+    train_loader, valid_loader = train_test_split(dataset, test_size=0.2)  # split dataset
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=wd)
     criterion = nn.CrossEntropyLoss()
@@ -264,18 +266,20 @@ def sample_imgs(ddpm,
 
 
 if __name__ == '__main__':
-    os.makedirs('work_dirs', exist_ok=True)
-    n_steps = 1000
-    config_id = 4
-    device = 'cuda'
-    model_path = './model/model_unet_res.pth'
-    data_path = './data'
-
-    config = configs[config_id]
-    net = build_network(config, n_steps)
-    ddpm = DDPM(device, n_steps)
-
-    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
-
-    net.load_state_dict(torch.load(model_path))
-    sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
+    # os.makedirs('work_dirs', exist_ok=True)
+    # n_steps = 1000
+    # config_id = 4
+    # device = 'cuda'
+    # model_path = './model/model_unet_res.pth'
+    # data_path = './data'
+    #
+    # config = configs[config_id]
+    # net = build_network(config, n_steps)
+    # ddpm = DDPM(device, n_steps)
+    #
+    # train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
+    #
+    # net.load_state_dict(torch.load(model_path))
+    # sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
+    dataset = get_dataloader('./data', batch_size, 512)
+    vit_train(dataset)
