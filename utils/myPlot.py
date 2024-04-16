@@ -1,3 +1,5 @@
+import os.path
+
 import cv2
 import scipy.signal as signal
 import numpy as np
@@ -53,7 +55,7 @@ class MyPlot:
         plt.tight_layout()
         plt.savefig(path + self.title + '_stft.png', pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
-        return path + self.title + '_stft.png'
+        return os.path.join(path, self.title + '_stft.png')
         # plt.show()
 
     def showSTFT(self):
@@ -75,7 +77,7 @@ class MyPlot:
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
-        plt.savefig(path + self.title + '_waveform.png', pad_inches=0, bbox_inches='tight', format='png')
+        plt.savefig(os.path.join(path , self.title + '_waveform.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
 
     def showWaveform(self):
@@ -92,11 +94,11 @@ def processImg(shape, img):
     # cv2.waitKey(0)
     # print("size: ", img.shape)
 
-    # if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
-    #     # 将img由三通道转换为单通道
-    #     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    if img.shape[2] == 3 or img.shape[2] == 4:  # 彩色图像
+        # 将img由三通道转换为单通道
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
-    if img.shape[1:] != shape[1:]:
+    if img.shape != shape[1:]:
         img = cv2.resize(img, shape[1:])
     # 改变图像大小
     # cv2.imshow('resize', img)

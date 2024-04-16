@@ -79,8 +79,8 @@ class Signal:
         slices = []
         for label in self.data.index:
             temp = []
-            savePath = self.path.replace('.mat', '') + '\\' + "stft" + str(self.slice_length) + '\\' + label.replace(
-                '/', '_')
+            savePath = os.path.join( self.path.replace('.mat', ''), "stft" + str(self.slice_length), label.replace(
+                '/', '_'))
 
             if not os.path.exists(savePath):
                 os.makedirs(savePath)
@@ -93,7 +93,7 @@ class Signal:
             for column in tqdm(self.data.columns, desc="正在处理" + savePath + "的STFT图像"):
                 data = self.data.loc[label, column]
                 plot = MyPlot(data, column, fs=self.fs)
-                temp.append(plot.saveSTFT(path=savePath + '\\'))
+                temp.append(plot.saveSTFT(path=savePath))
 
             slices.append(temp)
         return DataFrame(slices, index=stftLabels, columns=slicesLabels)
@@ -157,7 +157,7 @@ class PictureData(VisionDataset):
                 # 保存合并后的图像
                 if not os.path.exists(path):
                     os.makedirs(path)
-                cv2.imwrite(path + '\\' + str(i) + '.png', img)
+                cv2.imwrite(os.path.join(path, str(i) + '.png'), img)
 
     def getDataSet(self):
         dic = {
@@ -176,6 +176,7 @@ class PictureData(VisionDataset):
         for path in self.paths:
             label = next((dic[key] for key in dic if key in path), -1)
             files = os.listdir(path)
+            files.sort()
             if self.merged:
                 png_files = [file for file in files[:-3] if file.endswith('.png')]
             else:
@@ -185,13 +186,15 @@ class PictureData(VisionDataset):
 
             for file in png_files:
                 img = cv2.imread(os.path.join(path, file), cv2.IMREAD_COLOR)
+                # cv2.imshow('original_img', img)
                 img = processImg(self.shape, img)  # 处理图像, 使其符合shape
                 img_tensor = torch.tensor(img, dtype=float32)  # 将numpy转换为tensor
-                img_tensor = img_tensor.permute(2, 0, 1)
+                # 将tensor形状转换为（1, 256, 256）
+                img_tensor = img_tensor.unsqueeze(0)
+                # img_tensor = img_tensor.permute(2, 0, 1)
 
                 # ndarr = img_tensor.numpy()
-                # cv2.imshow('original_img', img)
-                # cv2.imshow('img', ndarr)
+                # cv2.imshow('img', img)
                 # cv2.waitKey(0)
                 # cv2.destroyAllWindows()
                 data.append(img_tensor)
@@ -219,8 +222,8 @@ class PictureData(VisionDataset):
 def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
     tensor = tensor.detach().to('cpu')  # Detach tensor before converting to numpy
     img = tensor.numpy()
-    if img.shape[0] == 3 or img.shape[0] == 4:  # 彩色图像, 通道数为3或4, 通道顺序为RGB或RGBA
-        img = np.transpose(img, (1, 2, 0))  # CHW -> HWC
+    # if img.shape[0] == 3 or img.shape[0] == 4:  # 彩色图像, 通道数为3或4, 通道顺序为RGB或RGBA
+    img = np.transpose(img, (1, 2, 0))  # CHW -> HWC
     return img.astype(np.uint8)
 
 
@@ -232,7 +235,7 @@ def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
 
 
 def get_img_shape():  # 获取图像的形状
-    return 3, 256, 256
+    return 1, 256, 256
 
 
 if __name__ == '__main__':
