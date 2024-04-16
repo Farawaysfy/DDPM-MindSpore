@@ -13,7 +13,7 @@ from torchvision.datasets import VisionDataset
 from torchvision.transforms import Compose, ToTensor, Lambda
 from tqdm import tqdm
 
-from utils.myPlot import MyPlot, processImg
+from utils.FFTPlot import FFTPlot, processImg
 from torch.utils.data import Dataset
 
 
@@ -58,7 +58,6 @@ class Signal:
                     temp.append(np.array(v[0][i * self.slice_length:(i + 1) * self.slice_length]))
                 slices.append(temp)
         else:
-            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(data[0][0]) - self.slice_length)]
             for v in data:
                 temp = []
                 left, right = 0, self.slice_length
@@ -66,7 +65,9 @@ class Signal:
                     temp.append(np.array(v[0][left:right]))
                     left += self.slice_length // 2
                     right += self.slice_length // 2
+
                 slices.append(temp)
+            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(slices[0]))]
         # print("dataLabels=", dataLabels)
         df = DataFrame(slices, index=dataLabels, columns=slices_labels, )
         # print("df=", df)
@@ -79,7 +80,7 @@ class Signal:
         slices = []
         for label in self.data.index:
             temp = []
-            savePath = os.path.join( self.path.replace('.mat', ''), "stft" + str(self.slice_length), label.replace(
+            savePath = os.path.join(self.path.replace('.mat', ''), "stft" + str(self.slice_length), label.replace(
                 '/', '_'))
 
             if not os.path.exists(savePath):
@@ -92,32 +93,54 @@ class Signal:
 
             for column in tqdm(self.data.columns, desc="正在处理" + savePath + "的STFT图像"):
                 data = self.data.loc[label, column]
-                plot = MyPlot(data, column, fs=self.fs)
+                plot = FFTPlot(data, column, fs=self.fs)
                 temp.append(plot.saveSTFT(path=savePath))
 
             slices.append(temp)
         return DataFrame(slices, index=stftLabels, columns=slicesLabels)
 
-    def plotWaveform(self):
-        pass
 
-
-class Signals:
-    def __init__(self, path, fs=1024, slice_length=512, slice_type='cut'):
+class Signals(Dataset):
+    def __init__(self, path, fs=1024, slice_length=512, slice_type='cut', axis=0):
         paths = [path + '\\' + f for f in os.listdir(path) if f.endswith('.mat')]  # 获取所有.mat文件
         if slice_type == 'cut':
-            print("当前信号分割模式为切片式（不重复）")
+            print("当前信号分割模式为切片式（不重叠）")
         else:
-            print("当前信号分割模式为窗口式（重复）")
+            print("当前信号分割模式为窗口式（重叠）")
         self.signals = [Signal(path, fs, slice_length, slice_type) for path in paths]  # 读取所有.mat文件
         self.labels = [signal.label for signal in self.signals]  # 获取所有信号的标签
         self.df = self.signals[0].data  # 初始化DataFrame
         for i in range(1, len(self.signals)):  # 合并所有信号的数据
             self.df = pd.merge(self.df, self.signals[i].data, left_index=True, right_index=True, how='outer')
+        self.data, self.target = self.makeDataSets(axis)
 
     def saveSTFT(self):
         for signal in self.signals:
             signal.saveSTFT()
+
+    def makeDataSets(self, axis=0):
+
+        dic = {
+            0: 'TimeData/Motor/S_x',
+            1: 'TimeData/Motor/R_y',
+            2: 'TimeData/Motor/T_z',
+        }
+        data = []
+        target = []
+        # 选择df的一行
+        selected_column = self.df.loc[dic[axis]]
+        for i in range(len(selected_column)):
+            data.append(selected_column[i])
+            # 选择select_column的行标签
+            target.append(selected_column.index[i].split('_')[0])
+
+        return data, target
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.target[idx]
 
 
 class PictureData(VisionDataset):
@@ -240,12 +263,14 @@ def get_img_shape():  # 获取图像的形状
 
 if __name__ == '__main__':
     print('test')
-    # dataSet = Signals('../data', slice_length=5120)
+    dataSet = Signals('../data', slice_length=512, slice_type='window', axis=0)
     # dataSet.saveSTFT()
     # print(dataSet.df)
+    data, _ = dataSet.__getitem__(0)
+
     # print(dataSet.df[0])
-    dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)
-    dataset.showFigure(0)
+    # dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)
+    # dataset.showFigure(0)
     # dataset.process()
     # print(dataset.paths)
     # dataset.getDataSet()
