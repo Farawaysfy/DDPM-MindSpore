@@ -1,21 +1,179 @@
 import os
-import time
 
 import cv2
 import einops
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.model_selection import train_test_split
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.utils import make_grid
 from tqdm import tqdm
 
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg
+from model.vit import VisionTransformer
 from utils.dataset import get_dataloader, get_img_shape, tensor2img
 
 batch_size = 64
 n_epochs = 500
+_exp_name = "sample"
+
+
+def config_read(config):
+    batch_size = config['batch_size']
+    n_epochs = config['n_epochs']
+    device = config['device']
+    learning_rate = config['lr']
+    wd = config['weight_decay']
+    seed = config['seed']
+    return batch_size, n_epochs, device, learning_rate, wd, seed
+
+
+# fix seed
+def same_seeds(seed):
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+
+def train_model(config, dataset):
+    batch_size, n_epochs, device, learning_rate, wd, seed = config_read(config)
+    same_seeds(seed)
+    model = VisionTransformer().to(device)
+    stale = 0
+    best_acc = 0
+    patience = 300
+
+    train_loader, valid_loader = train_test_split(dataset, test_size=0.2)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=wd)
+    criterion = nn.CrossEntropyLoss()
+
+    for epoch in range(n_epochs):
+
+        # ---------- Training ----------
+        # Make sure the model is in train mode before training.
+        model.train()
+
+        # These are used to record information in training.
+        train_loss = []
+        train_accs = []
+
+        for batch in tqdm(train_loader):
+            # A batch consists of image data and corresponding labels.
+            imgs, labels = batch
+            # imgs = imgs.half()
+            # print(imgs.shape,labels.shape)
+
+            # Forward the data. (Make sure data and model are on the same device.)
+            logits = model(imgs.to(device))
+
+            # Calculate the cross-entropy loss.
+            # We don't need to apply softmax before computing cross-entropy as it is done automatically.
+            loss = criterion(logits, labels.to(device))
+
+            # Gradients stored in the parameters in the previous step should be cleared out first.
+            optimizer.zero_grad()
+
+            # Compute the gradients for parameters.
+            loss.backward()
+
+            # Clip the gradient norms for stable training.
+            grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=10)
+
+            # Update the parameters with computed gradients.
+            optimizer.step()
+
+            # Compute the accuracy for current batch.
+            acc = (logits.argmax(dim=-1) == labels.to(device)).float().mean()
+
+            # Record the loss and accuracy.
+            train_loss.append(loss.item())
+            train_accs.append(acc)
+
+        train_loss = sum(train_loss) / len(train_loss)
+        train_acc = sum(train_accs) / len(train_accs)
+
+        # Print the information.
+        print(f"[ Train | {epoch + 1:03d}/{n_epochs:03d} ] loss = {train_loss:.5f}, acc = {train_acc:.5f}")
+
+        # ---------- Validation ----------
+        # Make sure the model is in eval mode so that some modules like dropout are disabled and work normally.
+        model.eval()
+
+        # These are used to record information in validation.
+        valid_loss = []
+        valid_accs = []
+
+        # Iterate the validation set by batches.
+        for batch in tqdm(valid_loader):
+            # A batch consists of image data and corresponding labels.
+            imgs, labels = batch
+            # imgs = imgs.half()
+
+            # We don't need gradient in validation.
+            # Using torch.no_grad() accelerates the forward process.
+            with torch.no_grad():
+                logits = model(imgs.to(device))
+
+            # We can still compute the loss (but not the gradient).
+            loss = criterion(logits, labels.to(device))
+
+            # Compute the accuracy for current batch.
+            acc = (logits.argmax(dim=-1) == labels.to(device)).float().mean()
+
+            # Record the loss and accuracy.
+            valid_loss.append(loss.item())
+            valid_accs.append(acc)
+            # break
+
+        # The average loss and accuracy for entire validation set is the average of the recorded values.
+        valid_loss = sum(valid_loss) / len(valid_loss)
+        valid_acc = sum(valid_accs) / len(valid_accs)
+
+        # Print the information.
+        print(f"[ Valid | {epoch + 1:03d}/{n_epochs:03d} ] loss = {valid_loss:.5f}, acc = {valid_acc:.5f}")
+
+        # update logs
+        if valid_acc > best_acc:
+            with open(f"./{_exp_name}_log.txt", "a"):
+                print(
+                    f"[ Valid | {epoch + 1:03d}/{n_epochs:03d} ] loss = {valid_loss:.5f}, acc = {valid_acc:.5f} -> best")
+        else:
+            with open(f"./{_exp_name}_log.txt", "a"):
+                print(f"[ Valid | {epoch + 1:03d}/{n_epochs:03d} ] loss = {valid_loss:.5f}, acc = {valid_acc:.5f}")
+
+        # save models
+        if valid_acc > best_acc:
+            print(f"Best model found at epoch {epoch}, saving model")
+            torch.save(model.state_dict(),
+                       f"{_exp_name}_best.ckpt")  # only save best to prevent output memory exceed error
+            best_acc = valid_acc
+            stale = 0
+        else:
+            stale += 1
+            if stale > patience:
+                print(f"No improvment {patience} consecutive epochs, early stopping")
+                break
+
+
+def vit_train(dataset, config=None):
+    # X_train, X_valid, y_train, y_valid= train_test_split(all_data_set)
+    #  hyper parameters
+    config = {
+        "batch_size": 16,
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        # "device": "cpu",
+        "n_epochs": 100,
+        "lr": 0.001,
+        "weight_decay": 1e-5,
+        "seed": 66
+    } if config is None else config
+    train_model(config, dataset)
 
 
 def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
@@ -29,7 +187,6 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), 1e-3)
 
-    tic = time.time()
     i = 0
     for e in range(n_epochs):
         total_loss = 0
@@ -65,9 +222,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             i += 1
         total_loss /= len(dataloader.dataset)
         writer.add_scalar('epochs loss', total_loss, e)
-        toc = time.time()
         torch.save(net.state_dict(), ckpt_path)
-        # print(f'epoch {e} loss: {total_loss} elapsed {(toc - tic):.2f}s')
     print('Done')
 
 
@@ -103,7 +258,7 @@ def sample_imgs(ddpm,
         #     imgs = imgs[:, :, :3]  # Remove alpha channel
 
         # imgs = cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR)    # RGB是hwc的顺序，而cv2是chw的顺序
-        imgs = cv2.cvtColor(imgs, cv2.COLOR_GRAY2BGR)   # gray是hwc的顺序，而cv2是chw的顺序
+        imgs = cv2.cvtColor(imgs, cv2.COLOR_GRAY2BGR)  # gray是hwc的顺序，而cv2是chw的顺序
 
         cv2.imwrite(output_path, imgs)
 

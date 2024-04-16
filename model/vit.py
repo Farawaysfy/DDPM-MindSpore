@@ -1,38 +1,3 @@
-from torch import nn
-
-
-# cnn_2d
-class cnn_2d_2layers(nn.Module):
-    def __init__(self, n_in=224, n_out=2):
-        super().__init__()
-        self.n_in = n_in
-        # input[1, n_in, n_in]
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 16, 3, stride=1, padding=(1, 1)),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.MaxPool2d(2, stride=2)
-        )  # output = [16, n_in/2, n_in/2]
-
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(16, 64, 3, stride=1, padding=(1, 1)),  # [16, 8, 8]
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.MaxPool2d(2, stride=2)
-        )  # output = [64, n_in/4, n_in/4]
-
-        self.linear1 = nn.Linear(int(64*n_in/4*n_in/4), n_out)  # [64, 4, 4] -> [8, 64*4*4]
-
-    def forward(self, x):
-        # column = int(np.sqrt(self.n_in))
-        # x = x.view(-1, 16, self.n_in)
-        # print("forward")
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = x.view(-1, int(64*self.n_in/4*self.n_in/4))
-        return self.linear1(x)
 
 
 """
@@ -44,6 +9,7 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
@@ -69,6 +35,7 @@ class DropPath(nn.Module):
     """
     Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
     """
+
     def __init__(self, drop_prob=None):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
@@ -81,6 +48,7 @@ class PatchEmbed(nn.Module):
     """
     2D Image to Patch Embedding
     """
+
     def __init__(self, img_size=224, patch_size=16, in_c=3, embed_dim=768, norm_layer=None):
         super().__init__()
         img_size = (img_size, img_size)
@@ -107,7 +75,7 @@ class PatchEmbed(nn.Module):
 
 class Attention(nn.Module):
     def __init__(self,
-                 dim,   # 输入token的dim
+                 dim,  # 输入token的dim
                  num_heads=8,
                  qkv_bias=False,
                  qk_scale=None,
@@ -152,6 +120,7 @@ class Mlp(nn.Module):
     """
     MLP as used in Vision Transformer, MLP-Mixer and related networks
     """
+
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
         out_features = out_features or in_features
