@@ -22,7 +22,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
           path='E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data', slice_length=512):
     print('batch size:', batch_size)
 
-    writer = SummaryWriter(log_dir='./run/04102130', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04151225', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     dataloader = get_dataloader(path, batch_size, slice_length)
     net = net.to(device)
@@ -94,12 +94,16 @@ def sample_imgs(ddpm,
         imgs = (imgs + 1) / 2 * 255
         imgs = imgs.clamp(0, 255)
         imgs = einops.rearrange(imgs,
-                                '(b1 b2) c h w -> (b1 h) (b2 w) c',
+                                '(b1 b2) c h w -> (b1 h) (b2 w) c',  # 将图片拼接成一个大图, chw -> hwc
                                 b1=int(n_sample ** 0.5))
 
         imgs = imgs.numpy().astype(np.uint8)  # Convert tensor to numpy
-        if imgs.shape[2] == 4:
-            imgs = imgs[:, :, :3]  # Remove alpha channel
+        # imgs = np.transpose(imgs, (1, 2, 0))
+        # if imgs.shape[2] == 4:
+        #     imgs = imgs[:, :, :3]  # Remove alpha channel
+
+        # imgs = cv2.cvtColor(imgs, cv2.COLOR_RGB2BGR)    # RGB是hwc的顺序，而cv2是chw的顺序
+        imgs = cv2.cvtColor(imgs, cv2.COLOR_GRAY2BGR)   # gray是hwc的顺序，而cv2是chw的顺序
 
         cv2.imwrite(output_path, imgs)
 
@@ -119,4 +123,4 @@ if __name__ == '__main__':
     train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
 
     net.load_state_dict(torch.load(model_path))
-    sample_imgs(ddpm, net, 'work_dirs/diffusion.png', device=device)
+    sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
