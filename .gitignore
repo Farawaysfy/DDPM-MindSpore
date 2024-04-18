@@ -4,3 +4,6 @@
 *.pyc
 *.pth
 /run
+sample_log.txt
+stft_512_vit_sample_best.ckpt
+sample_best.ckpt

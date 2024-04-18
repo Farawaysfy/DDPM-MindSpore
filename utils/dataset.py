@@ -33,10 +33,10 @@ class Signal:
             'SWF': 6,
             'Unbalance': 7,
         }
-        fileName = self.path.split('\\')[-1]
+        # fileName = self.path.split('\\')[-1]
         self.label = -1
         for key in dic:
-            if key in fileName:
+            if key in path:
                 self.label = dic[key]
                 break
         df = self.loadMat()
@@ -99,10 +99,36 @@ class Signal:
             slices.append(temp)
         return DataFrame(slices, index=stftLabels, columns=slicesLabels)
 
+    def saveWaveform(self):
+        # 获取行标签
+        waveformLabels = self.data.index
+        slicesLabels = self.data.columns
+        slices = []
+        for label in self.data.index:
+            temp = []
+            savePath = os.path.join(self.path.replace('.mat', ''), "waveform" + str(self.slice_length), label.replace(
+                '/', '_'))
+
+            if not os.path.exists(savePath):
+                os.makedirs(savePath)
+            else:
+                # 删除文件夹下所有文件
+                for root, dirs, files in os.walk(savePath):
+                    for name in files:
+                        os.remove(os.path.join(root, name))
+
+            for column in tqdm(self.data.columns, desc="正在处理" + savePath + "的波形图像"):
+                data = self.data.loc[label, column]
+                plot = FFTPlot(data, column, fs=self.fs)
+                temp.append(plot.saveWaveform(path=savePath))
+
+            slices.append(temp)
+        return DataFrame(slices, index=waveformLabels, columns=slicesLabels)
+
 
 class Signals(Dataset):
     def __init__(self, path, fs=1024, slice_length=512, slice_type='cut', axis=0):
-        paths = [path + '\\' + f for f in os.listdir(path) if f.endswith('.mat')]  # 获取所有.mat文件
+        paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.mat')]  # 获取所有.mat文件
         if slice_type == 'cut':
             print("当前信号分割模式为切片式（不重叠）")
         else:
@@ -114,9 +140,14 @@ class Signals(Dataset):
             self.df = pd.merge(self.df, self.signals[i].data, left_index=True, right_index=True, how='outer')
         self.data, self.target = self.makeDataSets(axis)
 
-    def saveSTFT(self):
+    def saveFigure(self, type='stft'):
+
         for signal in self.signals:
-            signal.saveSTFT()
+            if type == 'stft':
+                signal.saveSTFT()
+            elif type == 'waveform':
+                signal.saveWaveform()
+
 
     def makeDataSets(self, axis=0):
 
@@ -158,7 +189,7 @@ class PictureData(VisionDataset):
                 if data_type in name and name.endswith(str(slice_length)):
                     self.paths.append(os.path.join(root, name))
         self.merged = merged
-        self.data_tensor, self.target_tensor, self.data_path = self.getDataSet()
+        self.data, self.target, self.data_path = self.getDataSet()
 
         # self.dataSet = self.getDataSet()
 
@@ -212,9 +243,9 @@ class PictureData(VisionDataset):
                 # cv2.imshow('original_img', img)
                 img = processImg(self.shape, img)  # 处理图像, 使其符合shape
                 img_tensor = torch.tensor(img, dtype=float32)  # 将numpy转换为tensor
-                # 将tensor形状转换为（1, 256, 256）
-                img_tensor = img_tensor.unsqueeze(0)
-                # img_tensor = img_tensor.permute(2, 0, 1)
+                # 将tensor形状转换为（1, 256, 256），灰度图像使用unsqueeze(0)转换为（1, 256, 256）
+                # img_tensor = img_tensor.unsqueeze(0)
+                img_tensor = img_tensor.permute(2, 0, 1)
 
                 # ndarr = img_tensor.numpy()
                 # cv2.imshow('img', img)
@@ -227,15 +258,15 @@ class PictureData(VisionDataset):
         return data, target, data_path
 
     def __len__(self):
-        return self.data_tensor.size(0)
+        return self.data.size(0)
 
     def __getitem__(self, idx):
-        return self.data_tensor[idx], self.target_tensor[idx]
+        return self.data[idx], self.target[idx]
 
     def showFigure(self, idx):
         original_img = cv2.imread(self.data_path[idx], cv2.IMREAD_COLOR)  # 读取原始图像, 格式为RGB
 
-        img = tensor2img(self.data_tensor[idx])  # 将tensor转换为numpy, 格式为BRG
+        img = tensor2img(self.data[idx])  # 将tensor转换为numpy, 格式为BRG
         cv2.imshow('original_img', original_img)
         cv2.imshow('img', img)
         cv2.waitKey(0)
@@ -258,15 +289,16 @@ def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
 
 
 def get_img_shape():  # 获取图像的形状
-    return 1, 256, 256
+    return 3, 256, 256
 
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data', slice_length=512, slice_type='window', axis=0)
+    dataSet = Signals('../data', slice_length=512, slice_type='cut', axis=0)
+    dataSet.saveFigure('waveform')
     # dataSet.saveSTFT()
     # print(dataSet.df)
-    data, _ = dataSet.__getitem__(0)
+    # data, _ = dataSet.__getitem__(0)
 
     # print(dataSet.df[0])
     # dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)

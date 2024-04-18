@@ -1,18 +1,17 @@
-import os
-
 import cv2
 import einops
 import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
+from model.ddpm import DDPM, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg
 from model.vit import VisionTransformer
-from utils.dataset import get_dataloader, get_img_shape, tensor2img
+from utils.dataset import get_dataloader, get_img_shape, tensor2img, PictureData
 
 batch_size = 64
 n_epochs = 500
@@ -27,7 +26,8 @@ def config_read(config):
     wd = config['weight_decay']
     seed = config['seed']
     shape = config['shape']
-    return batch_size, n_epochs, device, learning_rate, wd, seed, shape
+    num_classes = config['num_classes']
+    return batch_size, n_epochs, device, learning_rate, wd, seed, shape, num_classes
 
 
 # fix seed
@@ -42,16 +42,26 @@ def same_seeds(seed):
 
 
 def train_model(config, dataset):
-    batch_size, n_epochs, device, learning_rate, wd, seed, shape = config_read(config)
+    batch_size, n_epochs, device, learning_rate, wd, seed, shape, num_classes = config_read(config)
     same_seeds(seed)
     in_c, img_size, _ = shape
-    model = VisionTransformer(img_size=img_size, in_c=in_c).to(device)
+    model = VisionTransformer(img_size=img_size, in_c=in_c, num_classes=num_classes).to(device)
     stale = 0
     best_acc = 0
     patience = 300
 
-    train_loader, valid_loader = train_test_split(dataset, test_size=0.2)  # split dataset
-
+    data, labels = [], []
+    for d, l in dataset:
+        data.append(d)
+        labels.append(l)
+    data = torch.stack(data)
+    labels = torch.tensor(labels)
+    writer = SummaryWriter(log_dir='./run/04191453', filename_suffix=str(n_epochs), flush_secs=5)
+    train_data, valid_data, train_labels, valid_labels = train_test_split(data, labels, test_size=0.2)  # split dataset
+    train_dataset = TensorDataset(train_data, train_labels)
+    valid_dataset = TensorDataset(valid_data, valid_labels)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=wd)
     criterion = nn.CrossEntropyLoss()
 
@@ -65,7 +75,7 @@ def train_model(config, dataset):
         train_loss = []
         train_accs = []
 
-        for batch in tqdm(train_loader):
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{n_epochs}, training"):
             # A batch consists of image data and corresponding labels.
             imgs, labels = batch
             # imgs = imgs.half()
@@ -99,9 +109,8 @@ def train_model(config, dataset):
 
         train_loss = sum(train_loss) / len(train_loss)
         train_acc = sum(train_accs) / len(train_accs)
-
         # Print the information.
-        print(f"[ Train | {epoch + 1:03d}/{n_epochs:03d} ] loss = {train_loss:.5f}, acc = {train_acc:.5f}")
+        # print(f"[ Train | {epoch + 1:03d}/{n_epochs:03d} ] loss = {train_loss:.5f}, acc = {train_acc:.5f}")
 
         # ---------- Validation ----------
         # Make sure the model is in eval mode so that some modules like dropout are disabled and work normally.
@@ -112,7 +121,7 @@ def train_model(config, dataset):
         valid_accs = []
 
         # Iterate the validation set by batches.
-        for batch in tqdm(valid_loader):
+        for batch in tqdm(valid_loader, desc=f"Epoch {epoch + 1}/{n_epochs}, validation"):
             # A batch consists of image data and corresponding labels.
             imgs, labels = batch
             # imgs = imgs.half()
@@ -137,8 +146,15 @@ def train_model(config, dataset):
         valid_loss = sum(valid_loss) / len(valid_loss)
         valid_acc = sum(valid_accs) / len(valid_accs)
 
+        # add to tensorboard
+        # writer.add_scalar('train_loss', train_loss, epoch)
+        # writer.add_scalar('train_acc', train_acc, epoch)
+        # writer.add_scalar('valid_loss', valid_loss, epoch)
+        # writer.add_scalar('valid_acc', valid_acc, epoch)
+        writer.add_scalars('loss', {'train': train_loss, 'valid': valid_loss}, epoch)
+        writer.add_scalars('acc', {'train': train_acc, 'valid': valid_acc}, epoch)
         # Print the information.
-        print(f"[ Valid | {epoch + 1:03d}/{n_epochs:03d} ] loss = {valid_loss:.5f}, acc = {valid_acc:.5f}")
+        # print(f"[ Valid | {epoch + 1:03d}/{n_epochs:03d} ] loss = {valid_loss:.5f}, acc = {valid_acc:.5f}")
 
         # update logs
         if valid_acc > best_acc:
@@ -173,7 +189,9 @@ def vit_train(dataset, config=None):
         "n_epochs": 100,
         "lr": 0.001,
         "weight_decay": 1e-5,
-        "seed": 66
+        "seed": 66,
+        "shape": (3, 256, 256),
+        "num_classes": 8
     } if config is None else config
     train_model(config, dataset)
 
@@ -281,5 +299,8 @@ if __name__ == '__main__':
     #
     # net.load_state_dict(torch.load(model_path))
     # sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
-    dataset = get_dataloader('./data', batch_size, 512)
+    # dataset = get_dataloader('./data', batch_size, 512)
+    dataset = PictureData('./data', get_img_shape(), batch_size,
+                          'waveform', slice_length=512, merged=False)
+    # dataset.showFigure(10)
     vit_train(dataset)
