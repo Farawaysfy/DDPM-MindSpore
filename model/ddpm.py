@@ -3,7 +3,7 @@ from torch import nn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.dataset import get_img_shape
+from utils.dataset import get_shape
 
 
 class PositionalEncoding(nn.Module):
@@ -57,6 +57,72 @@ class ResidualBlock(nn.Module):
         return x
 
 
+class ResidualBlock1D(nn.Module):
+
+    def __init__(self, in_c: int, out_c: int):
+        super().__init__()
+        self.conv1 = nn.Conv1d(in_c, out_c, 3, 1, 1)
+        self.bn1 = nn.BatchNorm1d(out_c)
+        self.actvation1 = nn.ReLU()
+        self.conv2 = nn.Conv1d(out_c, out_c, 3, 1, 1)
+        self.bn2 = nn.BatchNorm1d(out_c)
+        self.actvation2 = nn.ReLU()
+        if in_c != out_c:
+            self.shortcut = nn.Sequential(nn.Conv1d(in_c, out_c, 1),
+                                          nn.BatchNorm1d(out_c))
+        else:
+            self.shortcut = nn.Identity()
+
+    def forward(self, input):
+        x = self.conv1(input)
+        x = self.bn1(x)
+        x = self.actvation1(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x += self.shortcut(input)
+        x = self.actvation2(x)
+        return x
+
+
+class ConvNet1D(nn.Module):
+
+    def __init__(self,
+                 n_steps,
+                 intermediate_channels=[10, 20, 40],
+                 pe_dim=10,
+                 insert_t_to_all_layers=False):
+        super().__init__()
+        C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
+        self.pe = PositionalEncoding(n_steps, pe_dim)
+
+        self.pe_linears = nn.ModuleList()
+        self.all_t = insert_t_to_all_layers
+        if not insert_t_to_all_layers:
+            self.pe_linears.append(nn.Linear(pe_dim, C))
+
+        self.residual_blocks = nn.ModuleList()
+        prev_channel = C
+        for channel in intermediate_channels:
+            self.residual_blocks.append(ResidualBlock1D(prev_channel, channel))
+            if insert_t_to_all_layers:
+                self.pe_linears.append(nn.Linear(pe_dim, prev_channel))
+            else:
+                self.pe_linears.append(None)
+            prev_channel = channel
+        self.output_layer = nn.Conv1d(prev_channel, C, 3, 1, 1)
+
+    def forward(self, x, t):
+        n = t.shape[0]
+        t = self.pe(t)
+        for m_x, m_t in zip(self.residual_blocks, self.pe_linears):
+            if m_t is not None:
+                pe = m_t(t).reshape(n, -1, 1)
+                x = x + pe
+            x = m_x(x)
+        x = self.output_layer(x)
+        return x
+
+
 class ConvNet(nn.Module):
 
     def __init__(self,
@@ -65,7 +131,7 @@ class ConvNet(nn.Module):
                  pe_dim=10,
                  insert_t_to_all_layers=False):
         super().__init__()
-        C, H, W = get_img_shape()  # 1, 28, 28
+        C, H, W = get_shape()  # 1, 28, 28;图片的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
         self.pe = PositionalEncoding(n_steps, pe_dim)
 
         self.pe_linears = nn.ModuleList()
@@ -130,7 +196,7 @@ class UNet(nn.Module):
                  pe_dim=10,
                  residual=False) -> None:
         super().__init__()
-        C, H, W = get_img_shape()
+        C, H, W = get_shape()
         layers = len(channels)
         Hs = [H]
         Ws = [W]
@@ -254,6 +320,26 @@ unet_res_cfg = {
     'residual': True
 }
 
+convnet1d_big_cfg = {
+    'type': 'ConvNet1D',
+    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160],
+    'pe_dim': 256,
+    'insert_t_to_all_layers': True
+}
+
+convnet1d_medium_cfg = {
+    'type': 'ConvNet1D',
+    'intermediate_channels': [10, 10, 20, 20, 40, 40, 80, 80],
+    'pe_dim': 256,
+    'insert_t_to_all_layers': True
+}
+
+convnet1d_small_cfg = {
+    'type': 'ConvNet1D',
+    'intermediate_channels': [10, 20],
+    'pe_dim': 128
+}
+
 
 def build_network(config: dict, n_steps):
     network_type = config.pop('type')
@@ -261,6 +347,8 @@ def build_network(config: dict, n_steps):
         network_cls = ConvNet
     elif network_type == 'UNet':
         network_cls = UNet
+    elif network_type == 'ConvNet1D':
+        network_cls = ConvNet1D
 
     network = network_cls(n_steps, **config)
     return network
@@ -287,6 +375,13 @@ class DDPM:
         self.alpha_bars = alpha_bars
 
     def sample_forward(self, x, t, eps=None):
+        alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1, 1)
+        if eps is None:
+            eps = torch.randn_like(x)
+        res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
+        return res
+
+    def sample_forward1D(self, x, t, eps=None):
         alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1, 1)
         if eps is None:
             eps = torch.randn_like(x)

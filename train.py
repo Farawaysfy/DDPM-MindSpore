@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import einops
 import numpy as np
@@ -8,10 +10,10 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from model.ddpm import DDPM, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
-    unet_res_cfg
+from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
+    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 from model.vit import VisionTransformer
-from utils.dataset import get_dataloader, get_img_shape, tensor2img, PictureData
+from utils.dataset import get_dataloader, get_shape, tensor2img, get_signal_dataloader
 
 batch_size = 64
 n_epochs = 500
@@ -200,9 +202,10 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
           path='E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data', slice_length=512):
     print('batch size:', batch_size)
 
-    writer = SummaryWriter(log_dir='./run/04151225', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04181822', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
-    dataloader = get_dataloader(path, batch_size, slice_length)
+    # dataloader = get_dataloader(path, batch_size, slice_length)
+    dataloader = get_signal_dataloader(path, batch_size, slice_length)
     net = net.to(device)
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), 1e-3)
@@ -214,24 +217,30 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
         for x, _ in tqdm(dataloader, desc='Epoch {}'.format(e)):
             current_batch_size = x.shape[0]
             x = x.to(device)  # Convert x to float32
-            img_to_write = tensor2img(x[0])
-            writer.add_image('origin', img_to_write, i, dataformats='HWC')  # tensor的形状是CHW, 对应的是channel, height, width
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布
-
-            eps_img = tensor2img(eps[0])
-            writer.add_image('eps', eps_img, i, dataformats='HWC')
-            x_t = ddpm.sample_forward(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始图片加噪声
-            #  写入加噪声的图片
-            x_t_img = tensor2img(x_t[0])
-            writer.add_image('add_noise', x_t_img, i, dataformats='HWC')
+            x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始图片加噪声
 
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
+
+            # 信号diffusion的过程
+
+
+
+            # 图像diffusion的过程
+            # img_to_write = tensor2img(x[0])
+            # writer.add_image('origin', img_to_write, i, dataformats='HWC')  # tensor的形状是CHW, 对应的是channel, height, width
+
+            # eps_img = tensor2img(eps[0])
+            # writer.add_image('eps', eps_img, i, dataformats='HWC')
+
+            #  写入加噪声的图片
+            # x_t_img = tensor2img(x_t[0])
+            # writer.add_image('add_noise', x_t_img, i, dataformats='HWC')
             # 生成一个eps_theta, eps_theta是x_t的一个前向样本,预测噪声
             #  写入处理完的图片
-            eps_theta_img = tensor2img(eps_theta[0])
-
-            writer.add_image('eps_theta', eps_theta_img, i, dataformats='HWC')
+            # eps_theta_img = tensor2img(eps_theta[0])
+            # writer.add_image('eps_theta', eps_theta_img, i, dataformats='HWC')
 
             loss = loss_fn(eps_theta, eps)  # 计算eps_theta和eps的损失
             optimizer.zero_grad()
@@ -248,7 +257,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
 configs = [
     convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg,
-    unet_res_cfg
+    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 ]
 
 
@@ -261,7 +270,7 @@ def sample_imgs(ddpm,
     net = net.to(device)
     net = net.eval()
     with torch.no_grad():
-        shape = (n_sample, *get_img_shape())  # 1, 3, 28, 28
+        shape = (n_sample, *get_shape())  # 1, 3, 28, 28
         imgs = ddpm.sample_backward(shape,
                                     net,
                                     device=device,
@@ -284,23 +293,23 @@ def sample_imgs(ddpm,
 
 
 if __name__ == '__main__':
-    # os.makedirs('work_dirs', exist_ok=True)
-    # n_steps = 1000
-    # config_id = 4
-    # device = 'cuda'
-    # model_path = './model/model_unet_res.pth'
-    # data_path = './data'
-    #
-    # config = configs[config_id]
-    # net = build_network(config, n_steps)
-    # ddpm = DDPM(device, n_steps)
-    #
-    # train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
-    #
-    # net.load_state_dict(torch.load(model_path))
+    os.makedirs('work_dirs', exist_ok=True)
+    n_steps = 1000
+    config_id = 5
+    device = 'cuda'
+    model_path = './model/model_unet_res.pth'
+    data_path = './data'
+
+    config = configs[config_id]
+    net = build_network(config, n_steps)
+    ddpm = DDPM(device, n_steps)
+
+    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
+
+    net.load_state_dict(torch.load(model_path))
     # sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
-    # dataset = get_dataloader('./data', batch_size, 512)
-    dataset = PictureData('./data', get_img_shape(), batch_size,
-                          'waveform', slice_length=512, merged=False)
-    # dataset.showFigure(10)
-    vit_train(dataset)
+    # dataset = PictureData('./data', get_img_shape(), batch_size,
+    #                       'waveform', slice_length=512, merged=False)
+    # # dataset.showFigure(10)
+    # vit_train(dataset)
+

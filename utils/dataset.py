@@ -129,6 +129,7 @@ class Signal:
 class Signals(Dataset):
     def __init__(self, path, fs=1024, slice_length=512, slice_type='cut', axis=0):
         paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.mat')]  # 获取所有.mat文件
+
         if slice_type == 'cut':
             print("当前信号分割模式为切片式（不重叠）")
         else:
@@ -138,7 +139,7 @@ class Signals(Dataset):
         self.df = self.signals[0].data  # 初始化DataFrame
         for i in range(1, len(self.signals)):  # 合并所有信号的数据
             self.df = pd.merge(self.df, self.signals[i].data, left_index=True, right_index=True, how='outer')
-        self.data, self.target = self.makeDataSets(axis)
+        self.data, self.target = self.makeDataSets()
 
     def saveFigure(self, type='stft'):
 
@@ -149,21 +150,22 @@ class Signals(Dataset):
                 signal.saveWaveform()
 
 
-    def makeDataSets(self, axis=0):
+    def makeDataSets(self):
 
         dic = {
-            0: 'TimeData/Motor/S_x',
-            1: 'TimeData/Motor/R_y',
-            2: 'TimeData/Motor/T_z',
+            'TimeData/Motor/S_x': 0,
+            'TimeData/Motor/R_y': 1,
+            'TimeData/Motor/T_z': 2,
         }
         data = []
         target = []
-        # 选择df的一行
-        selected_column = self.df.loc[dic[axis]]
-        for i in range(len(selected_column)):
-            data.append(selected_column[i])
-            # 选择select_column的行标签
-            target.append(selected_column.index[i].split('_')[0])
+        for key in dic:
+            # 选择df的一行
+            selected_column = self.df.loc[key]
+            for j in range(len(selected_column)):
+                data.append(selected_column[j])
+                # 选择select_column的行标签
+                target.append(selected_column.index[j].split('_')[0])
 
         return data, target
 
@@ -283,22 +285,26 @@ def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
 
 def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
     transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
-    dataset = PictureData(path, get_img_shape(), batch_size,
+    dataset = PictureData(path, get_shape(), batch_size,
                           'stft', slice_length=slice_length, transform=transform, merged=False)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
-def get_img_shape():  # 获取图像的形状
-    return 3, 256, 256
+def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='window') -> DataLoader:
+    dataset = Signals(path, slice_length=slice_length, slice_type=slice_type)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+
+def get_shape():  # 获取输入的形状
+    return 1, 1, 512
 
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data', slice_length=512, slice_type='cut', axis=0)
-    dataSet.saveFigure('waveform')
+    dataSet = Signals('../data', slice_length=512, slice_type='window')
     # dataSet.saveSTFT()
     # print(dataSet.df)
-    # data, _ = dataSet.__getitem__(0)
+    data, _ = dataSet.__getitem__(0)
 
     # print(dataSet.df[0])
     # dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)
