@@ -167,7 +167,7 @@ class Signals(Dataset):
 
 class PictureData(VisionDataset):
 
-    def __init__(self, path, shape, data_type: str, slice_length=512, merged=True):
+    def __init__(self, path, shape, data_type: str, slice_length=512):
         super().__init__(root=path)
         self.shape = shape
         self.paths = []
@@ -175,28 +175,28 @@ class PictureData(VisionDataset):
             for name in dirs:
                 if data_type in name and name.endswith(str(slice_length)):
                     self.paths.append(os.path.join(root, name))
-        self.merged = merged
+        # self.merged = merged
         self.data, self.target = self.getDataSet()
 
-    def process(self):
-        for path in self.paths:
-            #   将三张图像合并成一个
-            root = path
-
-            # 获取所有文件夹
-            dirs = os.listdir(root)[-3:]
-            length = len(os.listdir(os.path.join(root, dirs[0])))
-
-            for i in tqdm(range(length), desc="正在合并" + path + "的图像"):
-                img1 = cv2.imread(os.path.join(path, dirs[0], os.listdir(os.path.join(root, dirs[0]))[i]))
-                img2 = cv2.imread(os.path.join(path, dirs[1], os.listdir(os.path.join(root, dirs[1]))[i]))
-                img3 = cv2.imread(os.path.join(path, dirs[2], os.listdir(os.path.join(root, dirs[2]))[i]))
-                img = np.vstack((img1, img2, img3))
-
-                # 保存合并后的图像
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                cv2.imwrite(os.path.join(path, str(i) + '.png'), img)
+    # def process(self):
+    #     for path in self.paths:
+    #         #   将三张图像合并成一个
+    #         root = path
+    #
+    #         # 获取所有文件夹
+    #         dirs = os.listdir(root)[-3:]
+    #         length = len(os.listdir(os.path.join(root, dirs[0])))
+    #
+    #         for i in tqdm(range(length), desc="正在合并" + path + "的图像"):
+    #             img1 = cv2.imread(os.path.join(path, dirs[0], os.listdir(os.path.join(root, dirs[0]))[i]))
+    #             img2 = cv2.imread(os.path.join(path, dirs[1], os.listdir(os.path.join(root, dirs[1]))[i]))
+    #             img3 = cv2.imread(os.path.join(path, dirs[2], os.listdir(os.path.join(root, dirs[2]))[i]))
+    #             img = np.vstack((img1, img2, img3))
+    #
+    #             # 保存合并后的图像
+    #             if not os.path.exists(path):
+    #                 os.makedirs(path)
+    #             cv2.imwrite(os.path.join(path, str(i) + '.png'), img)
 
     def getDataSet(self):
         dic = {
@@ -213,8 +213,9 @@ class PictureData(VisionDataset):
         target = []
         for path in self.paths:
             label = next((dic[key] for key in dic if key in path), -1)
-            files = [file for file in os.listdir(path) if file.endswith('.png')]
-            png_files = files[:-3] if self.merged else [os.path.join(file, sub_file) for file in files[-3:] for
+            # 获取文件夹下所有png文件
+            files = [file for file in os.listdir(path)]
+            png_files = [os.path.join(file, sub_file) for file in files[-3:] for
                                                         _, _, sub_files in os.walk(os.path.join(path, file)) for
                                                         sub_file in sub_files]
 
@@ -259,15 +260,15 @@ def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='w
 
 
 def get_shape():  # 获取输入的形状
-    return 1, 1, 512
+    return 3, 256, 256
 
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data', slice_length=512, slice_type='window')
-    # dataSet.saveSTFT()
+    dataSet = Signals('../data', slice_length=512, slice_type='cut')
+    dataSet.saveFigure('stft')
     # print(dataSet.df)
-    data, _ = dataSet.__getitem__(0)
+    # data, _ = dataSet.__getitem__(0)
 
     # print(dataSet.df[0])
     # dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)
