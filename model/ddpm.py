@@ -322,22 +322,23 @@ unet_res_cfg = {
 
 convnet1d_big_cfg = {
     'type': 'ConvNet1D',
-    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160],
-    'pe_dim': 256,
+    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160, 40, 40, 10, 10, 1],
+    'pe_dim': 512,
     'insert_t_to_all_layers': True
 }
 
 convnet1d_medium_cfg = {
     'type': 'ConvNet1D',
-    'intermediate_channels': [10, 10, 20, 20, 40, 40, 80, 80],
-    'pe_dim': 256,
+    'intermediate_channels': [20, 20, 40, 40, 80, 80, 40, 40, 10, 10, 1],
+    'pe_dim': 512,
     'insert_t_to_all_layers': True
 }
 
 convnet1d_small_cfg = {
     'type': 'ConvNet1D',
-    'intermediate_channels': [10, 20],
-    'pe_dim': 128
+    'intermediate_channels': [10, 20, 20, 10, 10, 1],
+    'pe_dim': 512,
+    'insert_t_to_all_layers': True
 }
 
 
@@ -382,7 +383,7 @@ class DDPM:
         return res
 
     def sample_forward1D(self, x, t, eps=None):
-        alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1, 1)
+        alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
         if eps is None:
             eps = torch.randn_like(x)
         res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x

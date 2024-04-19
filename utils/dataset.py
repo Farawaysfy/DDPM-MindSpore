@@ -4,17 +4,15 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from matplotlib.pyplot import plot
 from pandas import DataFrame
 from scipy.io import loadmat
 from torch import float32
 from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
 from torchvision.datasets import VisionDataset
-from torchvision.transforms import Compose, ToTensor, Lambda
 from tqdm import tqdm
 
 from utils.FFTPlot import FFTPlot, processImg
-from torch.utils.data import Dataset
 
 
 class Signal:
@@ -127,31 +125,14 @@ class Signal:
 
 
 class Signals(Dataset):
-    def __init__(self, path, fs=1024, slice_length=512, slice_type='cut', axis=0):
-        paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.mat')]  # 获取所有.mat文件
-
-        if slice_type == 'cut':
-            print("当前信号分割模式为切片式（不重叠）")
-        else:
-            print("当前信号分割模式为窗口式（重叠）")
-        self.signals = [Signal(path, fs, slice_length, slice_type) for path in paths]  # 读取所有.mat文件
-        self.labels = [signal.label for signal in self.signals]  # 获取所有信号的标签
-        self.df = self.signals[0].data  # 初始化DataFrame
-        for i in range(1, len(self.signals)):  # 合并所有信号的数据
-            self.df = pd.merge(self.df, self.signals[i].data, left_index=True, right_index=True, how='outer')
+    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', axis=0):
+        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type) for f in os.listdir(path) if
+                        f.endswith('.mat')]
+        self.labels = [signal.label for signal in self.signals]
+        self.df = pd.concat([signal.data for signal in self.signals], axis=1)
         self.data, self.target = self.makeDataSets()
 
-    def saveFigure(self, type='stft'):
-
-        for signal in self.signals:
-            if type == 'stft':
-                signal.saveSTFT()
-            elif type == 'waveform':
-                signal.saveWaveform()
-
-
     def makeDataSets(self):
-
         dic = {
             'TimeData/Motor/S_x': 0,
             'TimeData/Motor/R_y': 1,
@@ -160,14 +141,22 @@ class Signals(Dataset):
         data = []
         target = []
         for key in dic:
-            # 选择df的一行
             selected_column = self.df.loc[key]
             for j in range(len(selected_column)):
-                data.append(selected_column[j])
-                # 选择select_column的行标签
+                # 将selected_column[j]转换为(1, x)的形状
+                temp = selected_column[j].copy()
+                temp = temp.reshape(1, len(temp))
+                data.append(temp)
                 target.append(selected_column.index[j].split('_')[0])
-
         return data, target
+
+    def saveFigure(self, type='stft'):
+
+        for signal in self.signals:
+            if type == 'stft':
+                signal.saveSTFT()
+            elif type == 'waveform':
+                signal.saveWaveform()
 
     def __len__(self):
         return len(self.data)
@@ -178,22 +167,16 @@ class Signals(Dataset):
 
 class PictureData(VisionDataset):
 
-    def __init__(self, path, shape, batch_size: int, data_type: str, slice_length=512, transform=None, merged=True):
-        if transform is None:
-            transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
-        super().__init__(root=path, transform=transform)
+    def __init__(self, path, shape, data_type: str, slice_length=512, merged=True):
+        super().__init__(root=path)
         self.shape = shape
-        self.batch_size = batch_size
-        self.data_type = data_type
         self.paths = []
         for root, dirs, files in os.walk(path):
             for name in dirs:
                 if data_type in name and name.endswith(str(slice_length)):
                     self.paths.append(os.path.join(root, name))
         self.merged = merged
-        self.data, self.target, self.data_path = self.getDataSet()
-
-        # self.dataSet = self.getDataSet()
+        self.data, self.target = self.getDataSet()
 
     def process(self):
         for path in self.paths:
@@ -228,49 +211,30 @@ class PictureData(VisionDataset):
         }
         data = []
         target = []
-        data_path = []
         for path in self.paths:
             label = next((dic[key] for key in dic if key in path), -1)
-            files = os.listdir(path)
-            files.sort()
-            if self.merged:
-                png_files = [file for file in files[:-3] if file.endswith('.png')]
-            else:
-                png_files = [os.path.join(file, sub_file) for file in files[-3:]
-                             for _, _, sub_files in os.walk(os.path.join(path, file))
-                             for sub_file in sub_files]
+            files = [file for file in os.listdir(path) if file.endswith('.png')]
+            png_files = files[:-3] if self.merged else [os.path.join(file, sub_file) for file in files[-3:] for
+                                                        _, _, sub_files in os.walk(os.path.join(path, file)) for
+                                                        sub_file in sub_files]
 
             for file in png_files:
                 img = cv2.imread(os.path.join(path, file), cv2.IMREAD_COLOR)
-                # cv2.imshow('original_img', img)
-                img = processImg(self.shape, img)  # 处理图像, 使其符合shape
-                img_tensor = torch.tensor(img, dtype=float32)  # 将numpy转换为tensor
-                # 将tensor形状转换为（1, 256, 256），灰度图像使用unsqueeze(0)转换为（1, 256, 256）
-                # img_tensor = img_tensor.unsqueeze(0)
-                img_tensor = img_tensor.permute(2, 0, 1)
-
-                # ndarr = img_tensor.numpy()
-                # cv2.imshow('img', img)
-                # cv2.waitKey(0)
-                # cv2.destroyAllWindows()
+                img = processImg(self.shape, img)
+                img_tensor = torch.tensor(img, dtype=float32).permute(2, 0, 1)
                 data.append(img_tensor)
                 target.append(label)
-                data_path.append(os.path.join(path, file))
-        data = torch.stack(data)
-        return data, target, data_path
+        return data, target
 
     def __len__(self):
-        return self.data.size(0)
+        return len(self.data)
 
     def __getitem__(self, idx):
         return self.data[idx], self.target[idx]
 
     def showFigure(self, idx):
-        original_img = cv2.imread(self.data_path[idx], cv2.IMREAD_COLOR)  # 读取原始图像, 格式为RGB
-
         img = tensor2img(self.data[idx])  # 将tensor转换为numpy, 格式为BRG
-        cv2.imshow('original_img', original_img)
-        cv2.imshow('img', img)
+        cv2.imshow('img_tensor', img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -284,9 +248,8 @@ def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
 
 
 def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
-    transform = Compose([ToTensor(), Lambda(lambda x: (x - 0.5) * 2)])
-    dataset = PictureData(path, get_shape(), batch_size,
-                          'stft', slice_length=slice_length, transform=transform, merged=False)
+    dataset = PictureData(path, get_shape(),
+                          'stft', slice_length=slice_length, merged=False)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 

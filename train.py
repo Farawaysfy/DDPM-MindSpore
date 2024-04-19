@@ -206,7 +206,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
     n_steps = ddpm.n_steps
     # dataloader = get_dataloader(path, batch_size, slice_length)
     dataloader = get_signal_dataloader(path, batch_size, slice_length)
-    net = net.to(device)
+    net = net.to(device).double()  # 将网络放到GPU上, 并且将网络的参数类型设置为double
     loss_fn = nn.MSELoss()
     optimizer = torch.optim.Adam(net.parameters(), 1e-3)
 
@@ -219,7 +219,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             x = x.to(device)  # Convert x to float32
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布
-            x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始图片加噪声
+            x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
 
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
 
