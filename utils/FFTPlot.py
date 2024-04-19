@@ -45,7 +45,7 @@ class FFTPlot:
                                               axis=-1, scaling='spectrum')
 
     def saveSTFT(self, path: str = './'):
-        plt.figure(figsize=(10, 10))  # 增加图像大小以提高清晰度
+        # plt.figure(figsize=(6, 4))  # 增加图像大小以提高清晰度
         plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
         # plt.colorbar()
         # plt.title(self.title + '_STFT')
@@ -55,13 +55,12 @@ class FFTPlot:
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
-        plt.savefig(path + self.title + '_stft.png', pad_inches=0, bbox_inches='tight', format='png')
+        plt.savefig(os.path.join(path, self.title + '_stft.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
-        return os.path.join(path, self.title + '_stft.png')
         # plt.show()
 
     def showSTFT(self):
-        plt.figure(figsize=(10, 6))  # 增加图像大小以提高清晰度
+        plt.figure(figsize=(6, 4))  # 增加图像大小以提高清晰度
         plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
         plt.colorbar()
         plt.title(self.title + '_STFT')
@@ -89,7 +88,6 @@ class FFTPlot:
         plt.tight_layout()
         plt.savefig(os.path.join(path, self.title + '_waveform.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
-        return os.path.join(path, self.title + '_waveform.png')
 
     def showWaveform(self):
         # 二维时频图
@@ -126,6 +124,6 @@ def processImg(shape, img):
 
 
 if __name__ == '__main__':
-    plot = FFTPlot(np.random.randn(5120), 'test')
+    plot = FFTPlot(np.random.randn(512), 'test')
     # plot.saveSTFT()
-    plot.showWaveform()
+    plot.showSTFT()
