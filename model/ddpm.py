@@ -387,7 +387,15 @@ class DDPM:
         if eps is None:
             eps = torch.randn_like(x)
         res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
+
         return res
+
+    def sample_backward1D(self, img_shape, net, device, simple_var=True):
+        x = torch.randn(img_shape).to(device)
+        net = net.to(device)
+        for t in range(self.n_steps - 1, -1):
+            x = self.sample_backward_step1D(x, t, net, simple_var)
+        return x
 
     def sample_backward(self, img_shape, net, device, simple_var=True):
         x = torch.randn(img_shape).to(device)
@@ -419,3 +427,4 @@ class DDPM:
         x_t = mean + noise
 
         return x_t
+

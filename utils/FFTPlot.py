@@ -38,15 +38,24 @@ class FFTPlot:
     def __init__(self, data: np.ndarray, title: str, fs=5120):
         self.data = data
         self.title = title
-        nperseg = len(data)
-        noverlap = int(nperseg / 4 * 3)
-        self.f, self.t, self.nd = signal.stft(data, fs=fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
-                                              detrend=False, return_onesided=True, boundary='zeros', padded=False,
-                                              axis=-1, scaling='spectrum')
+        self.fs = fs
+
+    def plotOriginal(self):
+        plt.plot(self.data)
+        plt.xlabel('time')
+        plt.ylabel('amplitude')
+        plt.title(self.title + '_Original')
+        plt.show()
+
 
     def saveSTFT(self, path: str = './'):
+        nperseg = len(data)
+        noverlap = int(nperseg / 4 * 3)
+        f, t, nd = signal.stft(data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
+                                              detrend=False, return_onesided=True, boundary='zeros', padded=False,
+                                              axis=-1, scaling='spectrum')
         # plt.figure(figsize=(6, 4))  # 增加图像大小以提高清晰度
-        plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
+        plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=0.5, cmap='viridis')
         # plt.colorbar()
         # plt.title(self.title + '_STFT')
         # plt.ylabel('frequency')
@@ -60,8 +69,12 @@ class FFTPlot:
         # plt.show()
 
     def showSTFT(self):
-        plt.figure(figsize=(6, 4))  # 增加图像大小以提高清晰度
-        plt.pcolormesh(self.t, self.f, np.abs(self.nd), vmin=0, vmax=0.5, cmap='viridis')
+        nperseg = len(data)
+        noverlap = int(nperseg / 4 * 3)
+        f, t, nd = signal.stft(data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
+                                              detrend=False, return_onesided=True, boundary='zeros', padded=False,
+                                              axis=-1, scaling='spectrum')
+        plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=0.5, cmap='viridis')
         plt.colorbar()
         plt.title(self.title + '_STFT')
         plt.ylabel('frequency')
@@ -126,4 +139,5 @@ def processImg(shape, img):
 if __name__ == '__main__':
     plot = FFTPlot(np.random.randn(512), 'test')
     # plot.saveSTFT()
-    plot.showSTFT()
+    # plot.showSTFT()
+    plot.plotOriginal()

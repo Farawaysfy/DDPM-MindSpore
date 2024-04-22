@@ -261,7 +261,7 @@ def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='w
 
 
 def get_shape():  # 获取输入的形状
-    return 3, 256, 256
+    return 1, 1, 512
 
 
 if __name__ == '__main__':
