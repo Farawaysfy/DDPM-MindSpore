@@ -214,7 +214,8 @@ class PictureData(VisionDataset):
         for path in self.paths:
             label = next((dic[key] for key in dic if key in path), -1)
             # 获取文件夹下所有png文件
-            files = [file for file in os.listdir(path)]
+            files = [file for file in os.listdir(path) if not file.endswith('.png')]
+            # files.sort()
             png_files = [os.path.join(file, sub_file) for file in files[-3:] for
                                                         _, _, sub_files in os.walk(os.path.join(path, file)) for
                                                         sub_file in sub_files]
