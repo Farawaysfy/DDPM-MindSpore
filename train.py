@@ -5,6 +5,7 @@ import einops
 import numpy as np
 import torch
 import torch.nn as nn
+from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
@@ -13,7 +14,7 @@ from tqdm import tqdm
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 from model.vit import VisionTransformer
-from utils.dataset import get_dataloader, get_shape, tensor2img, get_signal_dataloader
+from utils.dataset import get_dataloader, get_shape, tensor2img, get_signal_dataloader, tensor2signal
 
 batch_size = 64
 n_epochs = 500
@@ -199,10 +200,9 @@ def vit_train(dataset, config=None):
 
 
 def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
-          path='E:\\sfy\\xiaolunwen\\alg\\DDPM-MindSpore\\data', slice_length=512):
-    print('batch size:', batch_size)
+          path='./data', slice_length=512):
 
-    writer = SummaryWriter(log_dir='./run/04181822', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04221539', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     # dataloader = get_dataloader(path, batch_size, slice_length)
     dataloader = get_signal_dataloader(path, batch_size, slice_length)
@@ -223,32 +223,31 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
 
-            # 信号diffusion的过程
-
-
-
-            # 图像diffusion的过程
-            # img_to_write = tensor2img(x[0])
-            # writer.add_image('origin', img_to_write, i, dataformats='HWC')  # tensor的形状是CHW, 对应的是channel, height, width
-
-            # eps_img = tensor2img(eps[0])
-            # writer.add_image('eps', eps_img, i, dataformats='HWC')
-
-            #  写入加噪声的图片
-            # x_t_img = tensor2img(x_t[0])
-            # writer.add_image('add_noise', x_t_img, i, dataformats='HWC')
-            # 生成一个eps_theta, eps_theta是x_t的一个前向样本,预测噪声
-            #  写入处理完的图片
-            # eps_theta_img = tensor2img(eps_theta[0])
-            # writer.add_image('eps_theta', eps_theta_img, i, dataformats='HWC')
-
             loss = loss_fn(eps_theta, eps)  # 计算eps_theta和eps的损失
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             total_loss += loss.item() * current_batch_size
+
+            # 信号diffusion的过程
+            fig, ax = plt.subplots(2, 2, figsize=(10, 10))
+            fig.tight_layout(h_pad=5, w_pad=5)
+
+            def plot_signal(signal, title, subplot_position):
+                plt.subplot(subplot_position)
+                plt.plot(tensor2signal(signal[0]))
+                plt.title(title)
+                plt.xlabel('time')
+                plt.ylabel('amplitude')
+
+            plot_signal(x, 'x', 2, 2, 1)
+            plot_signal(x_t, 'x_t', 2, 2, 2)
+            plot_signal(eps, 'eps', 2, 2, 3)
+            plot_signal(eps_theta, 'eps_theta', 2, 2, 4)
+            writer.add_figure('signal process', plt.gcf(), i)
             writer.add_scalar('step loss', loss.item(), i)
             i += 1
+
         total_loss /= len(dataloader.dataset)
         writer.add_scalar('epochs loss', total_loss, e)
         torch.save(net.state_dict(), ckpt_path)
