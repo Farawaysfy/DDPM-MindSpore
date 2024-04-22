@@ -382,7 +382,7 @@ class DDPM:
         res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
         return res
 
-    def sample_forward1D(self, x, t, eps=None):
+    def sample_forward1D(self, x, t, eps=None):  # x是一维信号， eps是噪声, t是随机数，此步是加噪声
         alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
         if eps is None:
             eps = torch.randn_like(x)

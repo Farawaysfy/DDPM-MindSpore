@@ -217,8 +217,8 @@ class PictureData(VisionDataset):
             files = [file for file in os.listdir(path) if not file.endswith('.png')]
             # files.sort()
             png_files = [os.path.join(file, sub_file) for file in files[-3:] for
-                                                        _, _, sub_files in os.walk(os.path.join(path, file)) for
-                                                        sub_file in sub_files]
+                         _, _, sub_files in os.walk(os.path.join(path, file)) for
+                         sub_file in sub_files]
 
             for file in png_files:
                 img = cv2.imread(os.path.join(path, file), cv2.IMREAD_COLOR)
@@ -247,6 +247,11 @@ def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
     # if img.shape[0] == 3 or img.shape[0] == 4:  # 彩色图像, 通道数为3或4, 通道顺序为RGB或RGBA
     img = np.transpose(img, (1, 2, 0))  # CHW -> HWC
     return img.astype(np.uint8)
+
+
+def tensor2signal(tensor):  # 将tensor转换为numpy
+    tensor = tensor.detach().to('cpu')  # Detach tensor before converting to numpy
+    return tensor.numpy()[0]
 
 
 def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
