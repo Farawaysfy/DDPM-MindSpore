@@ -344,12 +344,13 @@ convnet1d_small_cfg = {
 
 def build_network(config: dict, n_steps):
     network_type = config.pop('type')
-    if network_type == 'ConvNet':
-        network_cls = ConvNet
-    elif network_type == 'UNet':
-        network_cls = UNet
-    elif network_type == 'ConvNet1D':
-        network_cls = ConvNet1D
+    network_mapping = {
+        'ConvNet': ConvNet,
+        'UNet': UNet,
+        'ConvNet1D': ConvNet1D
+    }
+
+    network_cls = network_mapping.get(network_type)
 
     network = network_cls(n_steps, **config)
     return network

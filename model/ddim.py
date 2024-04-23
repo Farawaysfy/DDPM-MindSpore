@@ -5,7 +5,7 @@ from model.ddpm import DDPM
 
 
 class DDIM(DDPM):
-    #只加快采样速度，训练时不用
+    #   只加快采样速度，训练时不用
 
     def __init__(self,
                  device,
