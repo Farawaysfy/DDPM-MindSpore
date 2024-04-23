@@ -15,7 +15,7 @@ from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cf
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
-from utils.dataset import get_shape, get_signal_dataloader, tensor2signal
+from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder
 
 batch_size = 512
 n_epochs = 50
