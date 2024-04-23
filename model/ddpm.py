@@ -391,10 +391,10 @@ class DDPM:
 
         return res
 
-    def sample_backward1D(self, img_shape, net, device, simple_var=True):
-        x = torch.randn(img_shape).to(device)
+    def sample_backward1D(self, shape, net, device, simple_var=True):
+        x = torch.randn(shape).to(device)
         net = net.to(device)
-        for t in range(self.n_steps - 1, -1):
+        for t in range(self.n_steps - 1, -1, -1):
             x = self.sample_backward_step1D(x, t, net, simple_var)
         return x
 
@@ -406,6 +406,30 @@ class DDPM:
         return x
 
     def sample_backward_step(self, x_t, t, net, simple_var=True):
+        n = x_t.shape[0]
+        t_tensor = torch.tensor([t] * n,
+                                dtype=torch.long).to(x_t.device).unsqueeze(1)
+        eps = net(x_t, t_tensor)
+
+        if t == 0:
+            noise = 0
+        else:
+            if simple_var:
+                var = self.betas[t]
+            else:
+                var = (1 - self.alpha_bars[t - 1]) / (
+                        1 - self.alpha_bars[t]) * self.betas[t]
+            noise = torch.randn_like(x_t)
+            noise *= torch.sqrt(var)
+
+        mean = (x_t -
+                (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) *
+                eps) / torch.sqrt(self.alphas[t])
+        x_t = mean + noise
+
+        return x_t
+
+    def sample_backward_step1D(self, x_t, t, net, simple_var=True):
         n = x_t.shape[0]
         t_tensor = torch.tensor([t] * n,
                                 dtype=torch.long).to(x_t.device).unsqueeze(1)

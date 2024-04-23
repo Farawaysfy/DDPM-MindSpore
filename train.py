@@ -271,12 +271,10 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
         cv2.imwrite(output_path, cv2.cvtColor(imgs.numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR))
 
 
-
-
 def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=True):
     net = net.to(device).eval()
     with torch.no_grad():
-        shape = (n_sample, *get_shape())
+        shape = (n_sample, get_shape()[1], get_shape()[2])
 
         signals = ddpm.sample_backward1D(shape, net, device=device,
                                          simple_var=simple_var)
@@ -286,8 +284,8 @@ def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_va
         createFolder('work_dirs/original')
         createFolder('work_dirs/stft')
         createFolder('work_dirs/wf')
-        for i in range(n_sample):
-            fft = FFTPlot(tensor2signal(signals[i])[0], 'signal {}'.format(i + 1))
+        for i in tqdm(range(n_sample), desc='sample signals'):
+            fft = FFTPlot(tensor2signal(signals[i]), 'signal {}'.format(i + 1))
             fft.saveOriginal('work_dirs/original')
             fft.saveSTFT('work_dirs/stft')
             fft.saveWaveform('work_dirs/wf')
