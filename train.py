@@ -271,16 +271,6 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
         cv2.imwrite(output_path, cv2.cvtColor(imgs.numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR))
 
 
-def createFolder(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-    else:
-        # 删除文件夹下所有文件
-        for root, dirs, files in os.walk(path):
-            for name in files:
-                os.remove(os.path.join(root, name))
-            for name in dirs:
-                os.rmdir(os.path.join(root, name))
 
 
 def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=True):
@@ -299,7 +289,6 @@ def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_va
         for i in range(n_sample):
             fft = FFTPlot(tensor2signal(signals[i])[0], 'signal {}'.format(i + 1))
             fft.saveOriginal('work_dirs/original')
-            fft.showSTFT()
             fft.saveSTFT('work_dirs/stft')
             fft.saveWaveform('work_dirs/wf')
 

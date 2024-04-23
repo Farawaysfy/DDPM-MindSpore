@@ -40,46 +40,41 @@ class FFTPlot:
         self.title = title
         self.fs = fs
 
-    def plotOriginal(self):
+    def showOriginal(self, path: str = './'):
         plt.plot(self.data)
         plt.xlabel('time')
         plt.ylabel('amplitude')
         plt.title(self.title + '_Original')
         plt.show()
 
+    def saveOriginal(self, path: str = './'):
+        plt.plot(self.data)
+        plt.xlabel('time')
+        plt.ylabel('amplitude')
+        plt.title(self.title + '_Original')
+        plt.savefig(os.path.join(path, self.title + '_original.png'), pad_inches=0, bbox_inches='tight', format='png')
 
     def saveSTFT(self, path: str = './'):
-        nperseg = len(data)
+        nperseg = len(self.data)
         noverlap = int(nperseg / 4 * 3)
-        f, t, nd = signal.stft(data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
-                                              detrend=False, return_onesided=True, boundary='zeros', padded=False,
-                                              axis=-1, scaling='spectrum')
-        # plt.figure(figsize=(6, 4))  # 增加图像大小以提高清晰度
+        f, t, nd = signal.stft(self.data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
+                               detrend=False, return_onesided=True, boundary='zeros', padded=False,
+                               axis=-1, scaling='spectrum')
         plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=0.5, cmap='viridis')
-        # plt.colorbar()
-        # plt.title(self.title + '_STFT')
-        # plt.ylabel('frequency')
-        # plt.xlabel('time')
-        # plt.yscale('log')  # 使用对数刻度来增强低频特征的可视化
-        plt.xticks([])
-        plt.yticks([])
-        plt.tight_layout()
-        plt.savefig(os.path.join(path, self.title + '_stft.png'), pad_inches=0, bbox_inches='tight', format='png')
+        plt.savefig(os.path.join(path, self.title + '_STFT.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
-        # plt.show()
 
     def showSTFT(self):
-        nperseg = len(data)
+        nperseg = len(self.data)
         noverlap = int(nperseg / 4 * 3)
-        f, t, nd = signal.stft(data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
-                                              detrend=False, return_onesided=True, boundary='zeros', padded=False,
-                                              axis=-1, scaling='spectrum')
+        f, t, nd = signal.stft(self.data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
+                               detrend=False, return_onesided=True, boundary='zeros', padded=False,
+                               axis=-1, scaling='spectrum')
         plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=0.5, cmap='viridis')
         plt.colorbar()
         plt.title(self.title + '_STFT')
         plt.ylabel('frequency')
         plt.xlabel('time')
-        plt.yscale('log')  # 使用对数刻度来增强低频特征的可视化
         plt.show()
         plt.close()
 
@@ -93,9 +88,6 @@ class FFTPlot:
         [cwtmatr, frequencies] = pywt.cwt(self.data, scales, wavename, 1.0 / sr)  # 4.y为将要进行cwt变换的一维输入信号
         t = np.arange(0, self.data.shape[0] / sr, 1.0 / sr)
         plt.contourf(t, frequencies, abs(cwtmatr))
-        # plt.title(self.title + '_Waveform')
-        # plt.ylabel('frequency')
-        # plt.xlabel('time')
         plt.xticks([])
         plt.yticks([])
         plt.tight_layout()
@@ -139,5 +131,5 @@ def processImg(shape, img):
 if __name__ == '__main__':
     plot = FFTPlot(np.random.randn(512), 'test')
     # plot.saveSTFT()
-    # plot.showSTFT()
-    plot.plotOriginal()
+    plot.showSTFT()
+    plot.showOriginal()

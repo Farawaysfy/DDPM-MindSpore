@@ -15,6 +15,16 @@ from tqdm import tqdm
 from utils.FFTPlot import FFTPlot, processImg
 
 
+def createFolder(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    else:
+        # 删除文件夹下所有文件
+        for root, dirs, files in os.walk(path):
+            for name in files:
+                os.remove(os.path.join(root, name))
+            for name in dirs:
+                os.rmdir(os.path.join(root, name))
 class Signal:
     def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut'):
         self.path = path
@@ -72,12 +82,7 @@ class Signal:
         return df
 
     def saveSTFT(self):
-        # 获取行标签
-        stftLabels = self.data.index
-        slicesLabels = self.data.columns
-        slices = []
         for label in self.data.index:
-            temp = []
             savePath = os.path.join(self.path.replace('.mat', ''), "stft" + str(self.slice_length), label.replace(
                 '/', '_'))
 
@@ -92,36 +97,21 @@ class Signal:
             for column in tqdm(self.data.columns, desc="正在处理" + savePath + "的STFT图像"):
                 data = self.data.loc[label, column]
                 plot = FFTPlot(data, column, fs=self.fs)
-                temp.append(plot.saveSTFT(path=savePath))
-
-            slices.append(temp)
-        return DataFrame(slices, index=stftLabels, columns=slicesLabels)
+                plot.saveSTFT(path=savePath)
 
     def saveWaveform(self):
-        # 获取行标签
-        waveformLabels = self.data.index
-        slicesLabels = self.data.columns
-        slices = []
         for label in self.data.index:
             temp = []
             savePath = os.path.join(self.path.replace('.mat', ''), "waveform" + str(self.slice_length), label.replace(
                 '/', '_'))
 
-            if not os.path.exists(savePath):
-                os.makedirs(savePath)
-            else:
-                # 删除文件夹下所有文件
-                for root, dirs, files in os.walk(savePath):
-                    for name in files:
-                        os.remove(os.path.join(root, name))
+            createFolder(savePath)
 
             for column in tqdm(self.data.columns, desc="正在处理" + savePath + "的波形图像"):
                 data = self.data.loc[label, column]
                 plot = FFTPlot(data, column, fs=self.fs)
-                temp.append(plot.saveWaveform(path=savePath))
+                plot.saveWaveform(path=savePath)
 
-            slices.append(temp)
-        return DataFrame(slices, index=waveformLabels, columns=slicesLabels)
 
 
 class Signals(Dataset):
@@ -178,25 +168,6 @@ class PictureData(VisionDataset):
         # self.merged = merged
         self.data, self.target = self.getDataSet()
 
-    # def process(self):
-    #     for path in self.paths:
-    #         #   将三张图像合并成一个
-    #         root = path
-    #
-    #         # 获取所有文件夹
-    #         dirs = os.listdir(root)[-3:]
-    #         length = len(os.listdir(os.path.join(root, dirs[0])))
-    #
-    #         for i in tqdm(range(length), desc="正在合并" + path + "的图像"):
-    #             img1 = cv2.imread(os.path.join(path, dirs[0], os.listdir(os.path.join(root, dirs[0]))[i]))
-    #             img2 = cv2.imread(os.path.join(path, dirs[1], os.listdir(os.path.join(root, dirs[1]))[i]))
-    #             img3 = cv2.imread(os.path.join(path, dirs[2], os.listdir(os.path.join(root, dirs[2]))[i]))
-    #             img = np.vstack((img1, img2, img3))
-    #
-    #             # 保存合并后的图像
-    #             if not os.path.exists(path):
-    #                 os.makedirs(path)
-    #             cv2.imwrite(os.path.join(path, str(i) + '.png'), img)
 
     def getDataSet(self):
         dic = {
