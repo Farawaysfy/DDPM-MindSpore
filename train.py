@@ -15,7 +15,7 @@ from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cf
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
-from utils.dataset import get_shape, get_signal_dataloader, tensor2signal
+from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder
 
 batch_size = 512
 n_epochs = 50
@@ -210,13 +210,13 @@ def plot_signal(signal, title, subplot_position):
 
 def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
           path='./data', slice_length=512):
-    writer = SummaryWriter(log_dir='./run/04221653', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04231713', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     # dataloader = get_dataloader(path, batch_size, slice_length)
     dataloader = get_signal_dataloader(path, batch_size, slice_length)
     net = net.to(device).double()  # 将网络放到GPU上, 并且将网络的参数类型设置为double
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(net.parameters(), 1e-3)
+    optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
 
     i = 0
     for e in range(n_epochs):
@@ -271,15 +271,13 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
         cv2.imwrite(output_path, cv2.cvtColor(imgs.numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR))
 
 
-
-
-def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=True):
+def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True):
     net = net.to(device).eval()
     with torch.no_grad():
         shape = (n_sample, *get_shape())
 
         signals = ddpm.sample_backward1D(shape, net, device=device,
-                                         simple_var=simple_var)
+                                         simple_var=simple_var) / ddpm.n_steps
         # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
         # signals = signals.reshape(n_sample, -1)
         # 每条信号生成一张图片，将多张图片拼接成一张大图
@@ -292,24 +290,22 @@ def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_va
             fft.saveSTFT('work_dirs/stft')
             fft.saveWaveform('work_dirs/wf')
 
-        # plt.savefig(output_path)
-
 
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
-    n_steps = 1000
-    config_id = 5
+    n_steps = 1000  # 生成的步数
+    config_id = 7
     device = 'cuda'
-    model_path = './model/model_1d_cnn_signal.pth'
+    model_path = './model/model_1d_cnn_signal_small.pth'
     data_path = './data'
 
     config = configs[config_id]
     net = build_network(config, n_steps)
     ddpm = DDPM(device, n_steps)
 
-    # train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
+    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
 
-    sample_signals(ddpm, net, 'work_dirs/signal_diffusion.png', n_sample=81, device=device)
+    sample_signals(ddpm, net, n_sample=81, device=device)
     # net.load_state_dict(torch.load(model_path))
     # sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
     # dataset = PictureData('./data', get_shape(),

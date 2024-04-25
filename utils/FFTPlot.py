@@ -46,6 +46,7 @@ class FFTPlot:
         plt.ylabel('amplitude')
         plt.title(self.title + '_Original')
         plt.show()
+        plt.close()
 
     def saveOriginal(self, path: str = './'):
         plt.plot(self.data)
@@ -53,6 +54,7 @@ class FFTPlot:
         plt.ylabel('amplitude')
         plt.title(self.title + '_Original')
         plt.savefig(os.path.join(path, self.title + '_original.png'), pad_inches=0, bbox_inches='tight', format='png')
+        plt.close()
 
     def saveSTFT(self, path: str = './'):
         nperseg = len(self.data)
