@@ -120,17 +120,7 @@ class FFTPlot:
 
 
 def processImg(shape, img):
-    # cv2.imshow('img', img)
-    # print("size: ", img.shape)
-    # img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # 转换颜色空间
-    img = cv2.resize(img, shape[1:], interpolation=cv2.INTER_AREA)  # 作用是将图片缩放到指定大小
-    # 改变图像大小
-    # cv2.imshow('resize', img)
-    # # 显示当前图像
-    # cv2.waitKey(0)
-    #
-    # cv2.destroyAllWindows()
-    return img
+    return cv2.resize(img, shape[1:], interpolation=cv2.INTER_AREA)  # 作用是将图片缩放到指定大小
 
 
 if __name__ == '__main__':

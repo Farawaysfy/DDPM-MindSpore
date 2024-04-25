@@ -13,15 +13,14 @@ from tqdm import tqdm
 
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
-    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
+    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg
 from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
 from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
     tensor2img, make_noise, Signals
 
-batch_size = 512
-n_epochs = 50
+batch_size = 1024
 _exp_name = "sample"
 
 
@@ -212,8 +211,9 @@ def plot_signal(signal, title, subplot_position):
 
 
 def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
-          path='./data', slice_length=512):
-    writer = SummaryWriter(log_dir='./run/04231713', filename_suffix=str(n_epochs), flush_secs=5)
+          path='./data', slice_length=512, log_dir='./run/00000000', n_epochs=500):
+    createFolder(log_dir)
+    writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     # dataloader = get_dataloader(path, batch_size, slice_length)
     dataloader = get_signal_dataloader(path, batch_size, slice_length)
@@ -231,10 +231,11 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             # eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布  # 生成一个噪声
             # TODO
-            eps = make_noise(x)
-            x_t = ddpm.sample_forward1D(x, t, eps + x)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
+            eps = make_noise(x).to(device).double()  # 生成一个噪声
+            # x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
 
-            eps_theta = net(x_t, t.reshape(current_batch_size, 1))
+            x_t = x + eps  # 叠加噪声
+            eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 噪声提取器，提取噪声
 
             loss = loss_fn(eps_theta, eps)  # 计算eps_theta和eps的损失
             optimizer.zero_grad()
@@ -262,7 +263,8 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
 configs = [
     convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg,
-    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
+    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,
+    unet_res1d_cfg
 ]
 
 
@@ -345,16 +347,17 @@ def predict():
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
     n_steps = 1000
-    config_id = 4
+    config_id = 8
     device = 'cuda'
-    model_path = './model/model_1d_cnn_signal_big_steps10000.pth'
+    model_path = './model/reduce_noise_model_unet1d_res.pth'
     data_path = './data'
 
     config = configs[config_id]
     net = build_network(config, n_steps)
     ddpm = DDPM(device, n_steps)
 
-    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
+    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512,
+          log_dir='./run/04252036', n_epochs=2000)
     ddim = Reduce_noise(device, n_steps)
     net.load_state_dict(torch.load(model_path))
     sample_signals(ddim, net, n_sample=1000, device=device, input_path='./data')

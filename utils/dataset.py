@@ -323,10 +323,10 @@ def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='w
 
 
 def get_shape():  # 获取输入的形状
-    return 3, 128, 128
+    return 1, 1, 512
 
 
-def make_noise(original_signal:tensor, frequency_range=(10, 1000), amplitude_range=(1, 10),
+def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_range=(1, 10),
                snr_range=(-20, -5)):
     """
     生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
@@ -336,32 +336,35 @@ def make_noise(original_signal:tensor, frequency_range=(10, 1000), amplitude_ran
     :param snr_range: 信噪比范围，以dB为单位
     :return: 原始信号和带噪声的信号
     """
-    sample_length = original_signal.shape[1]
+    num_samples, sample_length = original_signal.shape[0], original_signal.shape[2]
     t = np.linspace(0, 1, sample_length, dtype=np.float16)
     # 随机选择频率和幅值
     frequency = np.random.uniform(*frequency_range)
     amplitude = np.random.uniform(*amplitude_range)
+    noises = []
+    for i in range(num_samples):
+        # 生成正弦波信号或复合信号
+        if np.random.rand() > 0.5:
+            # 生成正弦波信号
+            signal = amplitude * np.sin(2 * np.pi * frequency * t)
+        else:
+            # 生成复合信号
+            signal = amplitude * (np.sin(2 * np.pi * frequency * t) + np.sin(2 * np.pi * 0.5 * frequency * t))
 
-    # 生成正弦波信号或复合信号
-    if np.random.rand() > 0.5:
-        # 生成正弦波信号
-        signal = amplitude * np.sin(2 * np.pi * frequency * t)
-    else:
-        # 生成复合信号
-        signal = amplitude * (np.sin(2 * np.pi * frequency * t) + np.sin(2 * np.pi * 0.5 * frequency * t))
+        # 计算信号功率
+        signal_power = np.mean(signal ** 2)
 
-    # 计算信号功率
-    signal_power = np.mean(signal ** 2)
+        # 随机选择信噪比
+        snr_db = np.random.uniform(*snr_range)
+        snr_linear = 10 ** (snr_db / 10)
+        noise_power = signal_power / snr_linear
 
-    # 随机选择信噪比
-    snr_db = np.random.uniform(*snr_range)
-    snr_linear = 10 ** (snr_db / 10)
-    noise_power = signal_power / snr_linear
+        # 生成噪声
+        temp = np.random.normal(0, np.sqrt(noise_power), signal.shape).astype(np.float16)
+        noises.append([temp])
 
-    # 生成噪声并添加到信号上
-    noise = np.random.normal(0, np.sqrt(noise_power), signal.shape).astype(np.float16)
-
-    return noise
+    noises = np.array(noises)
+    return tensor(noises, dtype=float32)
 
 
 if __name__ == '__main__':
