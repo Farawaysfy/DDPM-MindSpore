@@ -213,13 +213,13 @@ def plot_signal(signal, title, subplot_position):
 
 def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
           path='./data', slice_length=512):
-    writer = SummaryWriter(log_dir='./run/04221653', filename_suffix=str(n_epochs), flush_secs=5)
+    writer = SummaryWriter(log_dir='./run/04231713', filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
     # dataloader = get_dataloader(path, batch_size, slice_length)
     dataloader = get_signal_dataloader(path, batch_size, slice_length)
     net = net.to(device).double()  # 将网络放到GPU上, 并且将网络的参数类型设置为double
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(net.parameters(), 1e-3)
+    optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
 
     i = 0
     for e in range(n_epochs):
@@ -307,7 +307,6 @@ def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True, input
             fft.saveOriginal('work_dirs/original')
             fft.saveSTFT('work_dirs/stft')
             fft.saveWaveform('work_dirs/wf')
-        # plt.savefig(output_path)
 
 
 def vit_predict(model_path, data, device='cuda'):
@@ -356,7 +355,6 @@ if __name__ == '__main__':
     ddpm = DDPM(device, n_steps)
 
     train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
-
     ddim = Reduce_noise(device, n_steps)
     net.load_state_dict(torch.load(model_path))
     sample_signals(ddim, net, n_sample=1000, device=device, input_path='./data')
