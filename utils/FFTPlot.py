@@ -62,7 +62,11 @@ class FFTPlot:
         f, t, nd = signal.stft(self.data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
                                detrend=False, return_onesided=True, boundary='zeros', padded=False,
                                axis=-1, scaling='spectrum')
-        plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=0.5, cmap='viridis')
+        plt.pcolormesh(t, f, np.abs(nd), cmap='viridis')   #vmin=0, vmax=0.5,
+
+        plt.xticks([])
+        plt.yticks([])
+        plt.tight_layout()
         plt.savefig(os.path.join(path, self.title + '_STFT.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
 
@@ -111,9 +115,8 @@ class FFTPlot:
         plt.title(self.title + '_Waveform')
         plt.ylabel('frequency')
         plt.xlabel('time')
-        # plt.subplots_adjust(hspace=0.4)  # 调整边距和子图的间距 hspace为子图之间的空间保留的高度，平均轴高度的一部分
-        plt.tight_layout()
         plt.show()
+        plt.close()
 
 
 def processImg(shape, img):
@@ -132,6 +135,6 @@ def processImg(shape, img):
 
 if __name__ == '__main__':
     plot = FFTPlot(np.random.randn(512), 'test')
-    # plot.saveSTFT()
-    plot.showSTFT()
-    plot.showOriginal()
+    plot.saveSTFT()
+    # plot.showSTFT()
+    # plot.showOriginal()

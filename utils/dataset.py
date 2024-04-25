@@ -25,6 +25,8 @@ def createFolder(path):
                 os.remove(os.path.join(root, name))
             for name in dirs:
                 os.rmdir(os.path.join(root, name))
+
+
 class Signal:
     def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut'):
         self.path = path
@@ -113,7 +115,6 @@ class Signal:
                 plot.saveWaveform(path=savePath)
 
 
-
 class Signals(Dataset):
     def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', axis=0):
         self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type) for f in os.listdir(path) if
@@ -168,7 +169,6 @@ class PictureData(VisionDataset):
         # self.merged = merged
         self.data, self.target = self.getDataSet()
 
-
     def getDataSet(self):
         dic = {
             'Aligned': 0,
@@ -212,11 +212,31 @@ class PictureData(VisionDataset):
         cv2.destroyAllWindows()
 
 
+class GeneralFigures(VisionDataset):
+
+    def __init__(self, path, shape, target=0):
+        super().__init__(root=path)
+        self.path = path
+        pngs = [os.path.join(path, file) for file in os.listdir(path) if file.endswith('.png')]
+        self.data, self.target = [], [target for _ in range(len(pngs))]
+        for png in pngs:
+            img = cv2.imread(png, cv2.IMREAD_COLOR)
+            img = processImg(shape, img)
+            img_tensor = torch.tensor(img, dtype=float32).permute(2, 0, 1)
+            self.data.append(img_tensor)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.target[idx]
+
+
 def tensor2img(tensor):  # 将tensor转换为numpy，CHW -> HWC
     tensor = tensor.detach().to('cpu')  # Detach tensor before converting to numpy
     img = tensor.numpy()
-    # if img.shape[0] == 3 or img.shape[0] == 4:  # 彩色图像, 通道数为3或4, 通道顺序为RGB或RGBA
-    img = np.transpose(img, (1, 2, 0))  # CHW -> HWC
+    if img.shape[0] == 3 or img.shape[0] == 4:  # 彩色图像, 通道数为3或4, 通道顺序为RGB或RGBA
+        img = np.transpose(img, (1, 2, 0))  # CHW -> HWC
     return img.astype(np.uint8)
 
 
@@ -237,7 +257,7 @@ def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='w
 
 
 def get_shape():  # 获取输入的形状
-    return 1, 1, 512
+    return 3, 128, 128
 
 
 if __name__ == '__main__':

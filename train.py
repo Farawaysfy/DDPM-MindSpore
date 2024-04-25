@@ -11,11 +11,13 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
-from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder
+from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
+    tensor2img
 
 batch_size = 512
 n_epochs = 50
@@ -266,37 +268,81 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
     with torch.no_grad():
         shape = (n_sample, *get_shape())
         imgs = ddpm.sample_backward(shape, net, device=device, simple_var=simple_var).detach().cpu()
-        imgs = einops.rearrange((imgs.clamp(0, 255) + 1) / 2 * 255, '(b1 b2) c h w -> (b1 h) (b2 w) c',
+        imgs = (imgs + 1) / 2 * 255
+        imgs = imgs.clamp(0, 255)
+        imgs = einops.rearrange(imgs, '(b1 b2) c h w -> (b1 h) (b2 w) c',
                                 b1=int(n_sample ** 0.5))
-        cv2.imwrite(output_path, cv2.cvtColor(imgs.numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR))
+        imgs = tensor2img(imgs)
+        cv2.imwrite(output_path, imgs)
 
 
 def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True):
     net = net.to(device).eval()
     with torch.no_grad():
-        shape = (n_sample, *get_shape())
+        shape = (n_sample, get_shape()[1], get_shape()[2])
 
-        signals = ddpm.sample_backward1D(shape, net, device=device,
-                                         simple_var=simple_var) / ddpm.n_steps
+        signals = ddpm.sample_backward(shape, net, device=device,
+                                       simple_var=simple_var)  # 生成信号, /ddpm.n_steps没有道理
+        signals = signals.detach().cpu().numpy()
+        # 当signals的范围超过-1到1之间时，对signals的绝对值进行对数运算， 使得范围缩小
+        # 记录信号的正负
+        while signals.max() > 10 or signals.min() < -10:
+            signals = np.sign(signals) * np.log10(np.abs(signals))
+        while signals.max() > 1 or signals.min() < -1:
+            signals = signals / 10
+        # signals = signals.clip(-1, 1)
         # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
         # signals = signals.reshape(n_sample, -1)
         # 每条信号生成一张图片，将多张图片拼接成一张大图
         createFolder('work_dirs/original')
         createFolder('work_dirs/stft')
         createFolder('work_dirs/wf')
-        for i in range(n_sample):
-            fft = FFTPlot(tensor2signal(signals[i])[0], 'signal {}'.format(i + 1))
+        for i in tqdm(range(n_sample), desc='sample signals'):
+            fft = FFTPlot(signals[i][0], 'signal {}'.format(i + 1))
             fft.saveOriginal('work_dirs/original')
             fft.saveSTFT('work_dirs/stft')
             fft.saveWaveform('work_dirs/wf')
 
 
+def vit_predict(model_path, data, device='cuda'):
+    net = VisionTransformer(img_size=256, in_c=3, num_classes=8).to(device)
+    net.load_state_dict(torch.load(model_path))
+    net.eval()
+    res = []
+    with torch.no_grad():
+        for d in tqdm(data, desc=f'predicting {model_path}'):
+            data = d.unsqueeze(0).to(device)
+            logits = net(data)
+            res.append(logits.argmax(dim=-1).item())
+    return res
+
+
+def predict():
+    classify_model_path = './model/stft_512_vit_sample_best300_64batch.ckpt'
+    stft_data = GeneralFigures('./work_dirs/stft', (3, 256, 256))
+    stft_res = vit_predict(classify_model_path, stft_data.data, device=device)
+    wf_data = GeneralFigures('./work_dirs/wf', (3, 256, 256))
+    classify_model_path = './model/wf_512_vit_sample_best300_64batch.ckpt'
+    wf_res = vit_predict(classify_model_path, wf_data.data, device=device)
+    # 预测矩阵
+    stft_res = np.array(stft_res).reshape(1000, 1)
+    wf_res = np.array(wf_res).reshape(1000, 1)
+    compare = stft_res == wf_res
+    res = np.concatenate((stft_res, wf_res, compare), axis=1)
+    # 统计预测结果
+    same = np.sum(compare)
+    percent = same / 1000
+    # 将结果写入csv
+    np.savetxt('work_dirs/result.csv', res, delimiter=',', fmt='%d')
+    print(f'预测结果：{same}个相同，占比{percent}')
+
+
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
-    n_steps = 1000  # 生成的步数
-    config_id = 7
+    n_steps = 1000
+    config_id = 4
     device = 'cuda'
-    model_path = './model/model_1d_cnn_signal_small.pth'
+    model_path = './model/model_1d_cnn_signal_big_steps10000.pth'
     data_path = './data'
 
     config = configs[config_id]
@@ -304,11 +350,11 @@ if __name__ == '__main__':
     ddpm = DDPM(device, n_steps)
 
     train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
-
-    sample_signals(ddpm, net, n_sample=81, device=device)
-    # net.load_state_dict(torch.load(model_path))
-    # sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
+    ddim = DDIM(device, n_steps)
+    net.load_state_dict(torch.load(model_path))
+    sample_signals(ddim, net, n_sample=1000, device=device)
+    # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
     # dataset = PictureData('./data', get_shape(),
     #                       'stft', slice_length=512)
-    # # # dataset.showFigure(10)
+    # dataset.showFigure(10)
     # vit_train(dataset)
