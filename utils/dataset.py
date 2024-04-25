@@ -4,9 +4,10 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from matplotlib import pyplot as plt
 from pandas import DataFrame
 from scipy.io import loadmat
-from torch import float32
+from torch import float32, tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision.datasets import VisionDataset
@@ -28,11 +29,12 @@ def createFolder(path):
 
 
 class Signal:
-    def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut'):
+    def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut', add_noise=False):
         self.path = path
         self.slice_length = slice_length
         self.slice_type = slice_type
         self.fs = fs
+        self.add_noise = add_noise
         dic = {
             'Aligned': 0,
             'Bearing': 1,
@@ -57,6 +59,18 @@ class Signal:
         rawData = loadmat(self.path)
         dataLabels = [v[0][0] for v in rawData['data'][0]]
         data = [[v[1].T[0]] for v in rawData['data'][0]]
+        data = np.array(data)  # 将数据转换为numpy数组
+        if self.add_noise:
+            original, data = generate_mixed_signal_data(data)
+            # 绘制原始信号和带噪声的信号
+            plt.figure(figsize=(18, 6))
+            plt.plot(data[0][0], label='Noisy Signal', linestyle='--', linewidth=1)
+            plt.plot(original[0][0], label='Original Signal', linewidth=1)
+            plt.xlabel("Sample Index")
+            plt.ylabel("Amplitude")
+            plt.legend()
+            plt.show()
+            plt.close()
         # print("data[0]=", data[0])
         slices = []
         if self.slice_type == 'cut':
@@ -116,11 +130,13 @@ class Signal:
 
 
 class Signals(Dataset):
-    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', axis=0):
-        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type) for f in os.listdir(path) if
+    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', add_noise=False):
+        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type, add_noise) for f in os.listdir(path)
+                        if
                         f.endswith('.mat')]
         self.labels = [signal.label for signal in self.signals]
         self.df = pd.concat([signal.data for signal in self.signals], axis=1)
+
         self.data, self.target = self.makeDataSets()
 
     def makeDataSets(self):
@@ -139,6 +155,9 @@ class Signals(Dataset):
                 temp = temp.reshape(1, len(temp))
                 data.append(temp)
                 target.append(selected_column.index[j].split('_')[0])
+        # 将data，target转换为numpy数组
+        data = np.array(data)
+        target = np.array(target)
         return data, target
 
     def saveFigure(self, type='stft'):
@@ -245,6 +264,53 @@ def tensor2signal(tensor):  # 将tensor转换为numpy
     return tensor.numpy()[0]
 
 
+def generate_mixed_signal_data(signals: np.ndarray, frequency_range=(10, 1000),
+                               amplitude_range=(1, 10), snr_range=(-20, -5)):
+    """
+    生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
+    :param signals: 原始信号数据集
+    :param frequency_range: 频率范围，以Hz为单位
+    :param amplitude_range: 幅值范围
+    :param snr_range: 信噪比范围，以dB为单位
+    :return: 原始信号和带噪声的信号
+    """
+    signals = np.zeros((10000, 512), dtype=np.float16) if signals is None else signals
+    num_samples, sample_length = len(signals), len(signals[0][0])
+    signals.reshape(-1, sample_length)
+    noisy_signals = np.zeros((num_samples, 1, sample_length), dtype=np.float16)
+    t = np.linspace(0, 1, sample_length, dtype=np.float16)
+
+    for i in range(num_samples):
+        # 随机选择频率和幅值
+        frequency = np.random.uniform(*frequency_range)
+        amplitude = np.random.uniform(*amplitude_range)
+
+        # 生成正弦波信号或复合信号
+        if np.random.rand() > 0.5:
+            # 生成正弦波信号
+            signal = amplitude * np.sin(2 * np.pi * frequency * t)
+        else:
+            # 生成复合信号
+            signal = amplitude * (np.sin(2 * np.pi * frequency * t) + np.sin(2 * np.pi * 0.5 * frequency * t))
+
+        # 计算信号功率
+        signal_power = np.mean(signal ** 2)
+
+        # 随机选择信噪比
+        snr_db = np.random.uniform(*snr_range)
+        snr_linear = 10 ** (snr_db / 10)
+        noise_power = signal_power / snr_linear
+
+        # 生成噪声并添加到信号上
+        noise = np.random.normal(0, np.sqrt(noise_power), signal.shape).astype(np.float16)
+        noisy_signal = signal + noise
+
+        signals[i] = signal
+        noisy_signals[i] = noisy_signal
+
+    return signals, noisy_signals
+
+
 def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
     dataset = PictureData(path, get_shape(),
                           'stft', slice_length=slice_length, merged=False)
@@ -260,10 +326,58 @@ def get_shape():  # 获取输入的形状
     return 3, 128, 128
 
 
+def make_noise(original_signal:tensor, frequency_range=(10, 1000), amplitude_range=(1, 10),
+               snr_range=(-20, -5)):
+    """
+    生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
+    :param original_signal: 原始信号数据集
+    :param frequency_range: 频率范围，以Hz为单位
+    :param amplitude_range: 幅值范围
+    :param snr_range: 信噪比范围，以dB为单位
+    :return: 原始信号和带噪声的信号
+    """
+    sample_length = original_signal.shape[1]
+    t = np.linspace(0, 1, sample_length, dtype=np.float16)
+    # 随机选择频率和幅值
+    frequency = np.random.uniform(*frequency_range)
+    amplitude = np.random.uniform(*amplitude_range)
+
+    # 生成正弦波信号或复合信号
+    if np.random.rand() > 0.5:
+        # 生成正弦波信号
+        signal = amplitude * np.sin(2 * np.pi * frequency * t)
+    else:
+        # 生成复合信号
+        signal = amplitude * (np.sin(2 * np.pi * frequency * t) + np.sin(2 * np.pi * 0.5 * frequency * t))
+
+    # 计算信号功率
+    signal_power = np.mean(signal ** 2)
+
+    # 随机选择信噪比
+    snr_db = np.random.uniform(*snr_range)
+    snr_linear = 10 ** (snr_db / 10)
+    noise_power = signal_power / snr_linear
+
+    # 生成噪声并添加到信号上
+    noise = np.random.normal(0, np.sqrt(noise_power), signal.shape).astype(np.float16)
+
+    return noise
+
+
 if __name__ == '__main__':
     print('test')
     dataSet = Signals('../data', slice_length=512, slice_type='cut')
-    dataSet.saveFigure('stft')
+
+    # noise, data = generate_mixed_signal_data(dataSet.data)
+    fft = FFTPlot(dataSet.data[0][0], 'original', fs=5120)
+    fft.showOriginal()
+
+    noise_fft = FFTPlot(make_noise(), 'noisy', fs=5120)
+    noise_fft.showOriginal()
+
+    # noise_dataset = Signals('../data', slice_length=512, slice_type='cut', add_noise=True)
+    # noise_fft = FFTPlot(noise_dataset.data[0][0], 'noisy', fs=5120)
+    # noise_fft.showOriginal()
     # print(dataSet.df)
     # data, _ = dataSet.__getitem__(0)
 

@@ -14,10 +14,11 @@ from tqdm import tqdm
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
+from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
 from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
-    tensor2img
+    tensor2img, make_noise, Signals
 
 batch_size = 512
 n_epochs = 50
@@ -228,8 +229,10 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             current_batch_size = x.shape[0]
             x = x.to(device)  # Convert x to float32
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
-            eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布
-            x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
+            # eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布  # 生成一个噪声
+            # TODO
+            eps = make_noise(x)
+            x_t = ddpm.sample_forward1D(x, t, eps + x)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
 
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))
 
@@ -276,12 +279,14 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
         cv2.imwrite(output_path, imgs)
 
 
-def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True):
+def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True, input_path=None):
     net = net.to(device).eval()
     with torch.no_grad():
-        shape = (n_sample, get_shape()[1], get_shape()[2])
-
-        signals = ddpm.sample_backward(shape, net, device=device,
+        if input_path is not None:
+            input = (n_sample, get_shape()[1], get_shape()[2])
+        else:
+            input = Signals(input_path, fs=5120, slice_length=512, slice_type='cut', add_noise=True)
+        signals = ddpm.sample_backward(input, net, device=device,
                                        simple_var=simple_var)  # 生成信号, /ddpm.n_steps没有道理
         signals = signals.detach().cpu().numpy()
         # 当signals的范围超过-1到1之间时，对signals的绝对值进行对数运算， 使得范围缩小
@@ -350,11 +355,11 @@ if __name__ == '__main__':
     net = build_network(config, n_steps)
     ddpm = DDPM(device, n_steps)
 
-    # train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
+    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
 
-    ddim = DDIM(device, n_steps)
+    ddim = Reduce_noise(device, n_steps)
     net.load_state_dict(torch.load(model_path))
-    sample_signals(ddim, net, n_sample=1000, device=device)
+    sample_signals(ddim, net, n_sample=1000, device=device, input_path='./data')
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
     # dataset = PictureData('./data', get_shape(),
     #                       'stft', slice_length=512)
