@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg
 from model.vit import VisionTransformer
@@ -271,13 +272,13 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
         cv2.imwrite(output_path, cv2.cvtColor(imgs.numpy().astype(np.uint8), cv2.COLOR_GRAY2BGR))
 
 
-def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=True):
+def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True):
     net = net.to(device).eval()
     with torch.no_grad():
         shape = (n_sample, get_shape()[1], get_shape()[2])
 
-        signals = ddpm.sample_backward1D(shape, net, device=device,
-                                         simple_var=simple_var)
+        signals = ddpm.sample_backward(shape, net, device=device,
+                                         simple_var=simple_var)  # 生成信号, /ddpm.n_steps没有道理
         # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
         # signals = signals.reshape(n_sample, -1)
         # 每条信号生成一张图片，将多张图片拼接成一张大图
@@ -295,10 +296,10 @@ def sample_signals(ddpm, net, output_path, n_sample=81, device='cuda', simple_va
 
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
-    n_steps = 1000
+    n_steps = 10000
     config_id = 5
     device = 'cuda'
-    model_path = './model/model_1d_cnn_signal.pth'
+    model_path = './model/model_1d_cnn_signal_big_steps10000.pth'
     data_path = './data'
 
     config = configs[config_id]
@@ -307,7 +308,8 @@ if __name__ == '__main__':
 
     # train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512)
 
-    sample_signals(ddpm, net, 'work_dirs/signal_diffusion.png', n_sample=81, device=device)
+    ddim = DDIM(device, n_steps)
+    sample_signals(ddim, net, n_sample=81, device=device)
     # net.load_state_dict(torch.load(model_path))
     # sample_imgs(ddpm, net, 'work_dirs/diffusion.png', n_sample=1, device=device)
     # dataset = PictureData('./data', get_shape(),

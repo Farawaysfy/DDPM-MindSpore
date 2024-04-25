@@ -395,13 +395,6 @@ class DDPM:
 
         return res
 
-    def sample_backward1D(self, shape, net, device, simple_var=True, clip_x0=True):
-        x = torch.randn(shape).to(device)
-        net = net.to(device)
-        for t in range(self.n_steps - 1, -1, -1):
-            x = self.sample_backward_step1D(x, t, net, simple_var, clip_x0)
-        return x
-
     def sample_backward(self, img_shape, net, device, simple_var=True,
                         clip_x0=True):
         x = torch.randn(img_shape).to(device)
@@ -443,38 +436,3 @@ class DDPM:
         x_t = mean + noise
 
         return x_t
-
-    def sample_backward_step1D(self, x_t, t, net, simple_var=True, clip_x0=True):
-        n = x_t.shape[0]
-        t_tensor = torch.tensor([t] * n,
-                                dtype=torch.long).to(x_t.device).unsqueeze(1)
-        eps = net(x_t, t_tensor)
-
-        if t == 0:
-            noise = 0
-        else:
-            if simple_var:
-                var = self.betas[t]
-            else:
-                var = (1 - self.alpha_bars[t - 1]) / (
-                        1 - self.alpha_bars[t]) * self.betas[t]
-            noise = torch.randn_like(x_t)
-            noise *= torch.sqrt(var)
-
-        if clip_x0:
-            x_0 = (x_t - torch.sqrt(1 - self.alpha_bars[t]) *
-                   eps) / torch.sqrt(self.alpha_bars[t])
-            x_0 = torch.clip(x_0, -1, 1)
-            mean = self.coef1[t] * x_t + self.coef2[t] * x_0
-        else:
-            mean = (x_t -
-                    (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) *
-                    eps) / torch.sqrt(self.alphas[t])
-        mean = (x_t -
-                (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) *
-                eps) / torch.sqrt(self.alphas[t])
-
-        x_t = mean + noise
-
-        return x_t
-

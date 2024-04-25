@@ -25,6 +25,8 @@ def createFolder(path):
                 os.remove(os.path.join(root, name))
             for name in dirs:
                 os.rmdir(os.path.join(root, name))
+
+
 class Signal:
     def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut'):
         self.path = path
@@ -113,7 +115,6 @@ class Signal:
                 plot.saveWaveform(path=savePath)
 
 
-
 class Signals(Dataset):
     def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', axis=0):
         self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type) for f in os.listdir(path) if
@@ -167,7 +168,6 @@ class PictureData(VisionDataset):
                     self.paths.append(os.path.join(root, name))
         # self.merged = merged
         self.data, self.target = self.getDataSet()
-
 
     def getDataSet(self):
         dic = {
