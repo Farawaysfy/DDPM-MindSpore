@@ -62,7 +62,7 @@ class FFTPlot:
         f, t, nd = signal.stft(self.data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
                                detrend=False, return_onesided=True, boundary='zeros', padded=False,
                                axis=-1, scaling='spectrum')
-        plt.pcolormesh(t, f, np.abs(nd), vmin=0, vmax=0.5, cmap='viridis')
+        plt.pcolormesh(t, f, np.abs(nd), cmap='viridis')   #vmin=0, vmax=0.5,
 
         plt.xticks([])
         plt.yticks([])
