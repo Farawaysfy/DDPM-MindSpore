@@ -324,7 +324,8 @@ class UNet1D(nn.Module):
                  n_steps,
                  channels=[10, 20, 40, 80],
                  pe_dim=10,
-                 residual=False) -> None:
+                 residual=False,
+                 ) -> None:
         super().__init__()
         C, H, W = get_shape()
         layers = len(channels)

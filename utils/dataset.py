@@ -81,7 +81,7 @@ class Signal:
                 for i in range(len(v[0]) // self.slice_length):
                     temp.append(np.array(v[0][i * self.slice_length:(i + 1) * self.slice_length]))
                 slices.append(temp)
-        else:
+        elif self.slice_type == 'window':
             for v in data:
                 temp = []
                 left, right = 0, self.slice_length
@@ -89,8 +89,11 @@ class Signal:
                     temp.append(np.array(v[0][left:right]))
                     left += self.slice_length // 2
                     right += self.slice_length // 2
-
                 slices.append(temp)
+            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(slices[0]))]
+        else:
+            for v in data:  # 存储原始数据
+                slices.append([v[0]])
             slices_labels = [str(self.label) + "_" + str(i) for i in range(len(slices[0]))]
         # print("dataLabels=", dataLabels)
         df = DataFrame(slices, index=dataLabels, columns=slices_labels, )
@@ -136,7 +139,7 @@ class Signals(Dataset):
                         f.endswith('.mat')]
         self.labels = [signal.label for signal in self.signals]
         self.df = pd.concat([signal.data for signal in self.signals], axis=1)
-
+        self.slice_type = slice_type
         self.data, self.target = self.makeDataSets()
 
     def makeDataSets(self):
@@ -156,6 +159,11 @@ class Signals(Dataset):
                 data.append(temp)
                 target.append(selected_column.index[j].split('_')[0])
         # 将data，target转换为numpy数组
+        # 对齐数据, 根据最短数据进行截取
+        if self.slice_type != 'cut' and self.slice_type != 'window':
+            min_length = min([len(data[i][0]) for i in range(len(data))])
+            for i in range(len(data)):
+                data[i] = data[i][:, :min_length]
         data = np.array(data)
         target = np.array(target)
         return data, target

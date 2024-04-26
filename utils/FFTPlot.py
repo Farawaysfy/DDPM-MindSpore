@@ -56,13 +56,35 @@ class FFTPlot:
         plt.savefig(os.path.join(path, self.title + '_original.png'), pad_inches=0, bbox_inches='tight', format='png')
         plt.close()
 
+    def saveFFT(self, path: str = './'):
+        n = len(self.data)
+        f = np.fft.fftfreq(n, 1 / self.fs)
+        y = np.abs(np.fft.fft(self.data)) / n
+        plt.plot(f[:n // 2], y[:n // 2])
+        plt.xticks([])
+        plt.yticks([])
+        plt.tight_layout()
+        plt.savefig(os.path.join(path, self.title + '_FFT.png'), pad_inches=0, bbox_inches='tight', format='png')
+        plt.close()
+
+    def showFFT(self):
+        n = len(self.data)
+        f = np.fft.fftfreq(n, 1 / self.fs)
+        y = np.abs(np.fft.fft(self.data)) / n
+        plt.plot(f[:n // 2], y[:n // 2])
+        plt.title(self.title + '_FFT')
+        plt.ylabel('amplitude')
+        plt.xlabel('frequency')
+        plt.show()
+        plt.close()
+
     def saveSTFT(self, path: str = './'):
         nperseg = len(self.data)
         noverlap = int(nperseg / 4 * 3)
         f, t, nd = signal.stft(self.data, fs=self.fs, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=None,
                                detrend=False, return_onesided=True, boundary='zeros', padded=False,
                                axis=-1, scaling='spectrum')
-        plt.pcolormesh(t, f, np.abs(nd), cmap='viridis')   #vmin=0, vmax=0.5,
+        plt.pcolormesh(t, f, np.abs(nd), cmap='viridis')  # vmin=0, vmax=0.5,
 
         plt.xticks([])
         plt.yticks([])

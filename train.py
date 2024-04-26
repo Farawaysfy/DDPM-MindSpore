@@ -235,9 +235,9 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             # x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
 
             x_t = x + eps  # 叠加噪声
-            eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 噪声提取器，提取噪声
+            eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器
 
-            loss = loss_fn(eps_theta, eps)  # 计算eps_theta和eps的损失
+            loss = loss_fn(eps_theta + 1, x + 1)  # 计算eps_theta和x的损失, 为什么要加1呢？因为x的范围是-1到1，加1之后变成0到2
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -283,24 +283,26 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
 
 def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True, input_path=None):
     net = net.to(device).eval()
-    with torch.no_grad():
-        in_signals = (n_sample, get_shape()[1], get_shape()[2]) if input_path is None else Signals(input_path, fs=5120,
-                                                                                                   slice_length=512,
-                                                                                                   slice_type='cut',
-                                                                                                   add_noise=True).data
+    with (torch.no_grad()):
+        in_signals = (n_sample, get_shape()[1], get_shape()[2]) \
+            if input_path is None else \
+            Signals(input_path, fs=5120, slice_length=512, slice_type='cut', add_noise=True)
         # 生成信号, /ddpm.n_steps没有道理
+        # 随机抽取n_sample个idx
+        if input_path is not None:
+            idxes = np.random.choice(len(in_signals), n_sample, replace=False)
+            in_signals, targets = in_signals[idxes]
         signals = ddpm.sample_backward(in_signals, net, device=device, simple_var=simple_var).detach().cpu().numpy()
-        if input_path is None:
-            # 当signals的范围超过-1到1之间时，对signals的绝对值进行对数运算， 使得范围缩小
-            # 记录信号的正负
-            # signals = signals.clip(-1, 1)
-            # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
-            # signals = signals.reshape(n_sample, -1)
-            signals = np.where(np.abs(signals) > 10, np.sign(signals) * np.log10(np.abs(signals)), signals)
-            signals = np.where(np.abs(signals) > 1, signals / 10, signals)
-        else:
-            signals -= in_signals
-
+        # if input_path is None:
+        #     # 当signals的范围超过-1到1之间时，对signals的绝对值进行对数运算， 使得范围缩小
+        #     # 记录信号的正负
+        #     # signals = signals.clip(-1, 1)
+        #     # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
+        #     # signals = signals.reshape(n_sample, -1)
+        #     signals = np.where(np.abs(signals) > 10, np.sign(signals) * np.log10(np.abs(signals)), signals)
+        #     signals = np.where(np.abs(signals) > 1, signals / 10, signals)
+        # else:
+        #     signals = np.where(np.abs(signals) > 1, signals / 10, signals)
         createFolder('work_dirs/original')
         createFolder('work_dirs/stft')
         createFolder('work_dirs/wf')
@@ -349,7 +351,7 @@ if __name__ == '__main__':
     n_steps = 1000
     config_id = 8
     device = 'cuda'
-    model_path = './model/reduce_noise_model_unet1d_res.pth'
+    model_path = './model/reduce_noise_model_unet1d_res_change_output.pth'
     data_path = './data'
 
     config = configs[config_id]
@@ -357,10 +359,10 @@ if __name__ == '__main__':
     ddpm = DDPM(device, n_steps)
 
     train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512,
-          log_dir='./run/04252036', n_epochs=2000)
-    ddim = Reduce_noise(device, n_steps)
+          log_dir='./run/04261827', n_epochs=2000)
+    rnddim = Reduce_noise(device, n_steps)
     net.load_state_dict(torch.load(model_path))
-    sample_signals(ddim, net, n_sample=1000, device=device, input_path='./data')
+    sample_signals(rnddim, net, n_sample=1000, device=device, input_path='./data')
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
     # dataset = PictureData('./data', get_shape(),
     #                       'stft', slice_length=512)
