@@ -384,13 +384,13 @@ class UNet1D(nn.Module):
             self.decoders.append(
                 nn.Sequential(
                     UNetBlock1D((channel * 2, cH, cW),
-                              channel * 2,
-                              channel,
-                              residual=residual),
+                                channel * 2,
+                                channel,
+                                residual=residual),
                     UNetBlock1D((channel, cH, cW),
-                              channel,
-                              channel,
-                              residual=residual)))
+                                channel,
+                                channel,
+                                residual=residual)))
 
             prev_channel = channel
 
@@ -475,6 +475,18 @@ convnet1d_small_cfg = {
 unet_res1d_cfg = {
     'type': 'UNet1D',
     'channels': [10, 20, 40, 80],
+    'pe_dim': 128,
+    'residual': True
+}
+unet_res1d_medium_cfg = {
+    'type': 'UNet1D',
+    'channels': [10, 20, 40, 80],
+    'pe_dim': 512,
+    'residual': True
+}
+unet_res1d_big_cfg = {
+    'type': 'UNet1D',
+    'channels': [10, 20, 40, 80, 160, 320],
     'pe_dim': 128,
     'residual': True
 }
