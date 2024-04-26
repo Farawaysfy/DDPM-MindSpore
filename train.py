@@ -13,7 +13,8 @@ from tqdm import tqdm
 
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
-    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg
+    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg, unet_res1d_medium_cfg, \
+    unet_res1d_big_cfg
 from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
@@ -262,9 +263,9 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
 
 configs = [
-    convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg,
-    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,
-    unet_res1d_cfg
+    convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, unet_res_cfg,  # 5, 图片处理
+    convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 信号处理
+    unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 信号处理
 ]
 
 
