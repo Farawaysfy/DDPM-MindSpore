@@ -284,23 +284,23 @@ def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=T
 def sample_signals(ddpm, net, n_sample=81, device='cuda', simple_var=True, input_path=None):
     net = net.to(device).eval()
     with torch.no_grad():
-        if input_path is not None:
-            input = (n_sample, get_shape()[1], get_shape()[2])
+        in_signals = (n_sample, get_shape()[1], get_shape()[2]) if input_path is None else Signals(input_path, fs=5120,
+                                                                                                   slice_length=512,
+                                                                                                   slice_type='cut',
+                                                                                                   add_noise=True).data
+        # 生成信号, /ddpm.n_steps没有道理
+        signals = ddpm.sample_backward(in_signals, net, device=device, simple_var=simple_var).detach().cpu().numpy()
+        if input_path is None:
+            # 当signals的范围超过-1到1之间时，对signals的绝对值进行对数运算， 使得范围缩小
+            # 记录信号的正负
+            # signals = signals.clip(-1, 1)
+            # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
+            # signals = signals.reshape(n_sample, -1)
+            signals = np.where(np.abs(signals) > 10, np.sign(signals) * np.log10(np.abs(signals)), signals)
+            signals = np.where(np.abs(signals) > 1, signals / 10, signals)
         else:
-            input = Signals(input_path, fs=5120, slice_length=512, slice_type='cut', add_noise=True)
-        signals = ddpm.sample_backward(input, net, device=device,
-                                       simple_var=simple_var)  # 生成信号, /ddpm.n_steps没有道理
-        signals = signals.detach().cpu().numpy()
-        # 当signals的范围超过-1到1之间时，对signals的绝对值进行对数运算， 使得范围缩小
-        # 记录信号的正负
-        while signals.max() > 10 or signals.min() < -10:
-            signals = np.sign(signals) * np.log10(np.abs(signals))
-        while signals.max() > 1 or signals.min() < -1:
-            signals = signals / 10
-        # signals = signals.clip(-1, 1)
-        # 将信号的形状从(n_sample, 1, n_steps)转换为(n_sample, n_steps)
-        # signals = signals.reshape(n_sample, -1)
-        # 每条信号生成一张图片，将多张图片拼接成一张大图
+            signals -= in_signals
+
         createFolder('work_dirs/original')
         createFolder('work_dirs/stft')
         createFolder('work_dirs/wf')
