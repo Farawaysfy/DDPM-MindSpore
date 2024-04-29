@@ -3,6 +3,7 @@ from torch import tensor
 from tqdm import tqdm
 
 from model.ddim import DDIM
+from utils.dataset import make_noise
 
 
 class Reduce_noise(DDIM):
@@ -13,6 +14,13 @@ class Reduce_noise(DDIM):
                  min_beta: float = 0.0001,
                  max_beta: float = 0.02):
         super().__init__(device, n_steps, min_beta, max_beta)
+
+    def sample_forward(self, x, t, eps=None):
+        alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
+        if eps is None:
+            eps = make_noise(x)
+        res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
+        return res
 
     def sample_backward(self,
                         original_signal,
@@ -33,10 +41,20 @@ class Reduce_noise(DDIM):
         for i in tqdm(range(1, ddim_step + 1),
                       f'DDIM sampling with eta {eta} simple_var {simple_var}'):
             cur_t = ts[i - 1] - 1
-
+            prev_t = ts[i] - 1
+            ab_cur = self.alpha_bars[cur_t]
+            ab_prev = self.alpha_bars[prev_t] if prev_t >= 0 else 1
             t_tensor = torch.tensor([cur_t] * batch_size,
                                     dtype=torch.long).to(device).unsqueeze(1)
             eps = net(x, t_tensor)
-
-            x -= eps
+            var = eta * (1 - ab_prev) / (1 - ab_cur) * (1 - ab_cur / ab_prev)
+            noise = make_noise(x)
+            first_term = (ab_prev / ab_cur) ** 0.5 * x
+            second_term = ((1 - ab_prev - var) ** 0.5 -
+                           (ab_prev * (1 - ab_cur) / ab_cur) ** 0.5) * eps
+            if simple_var:
+                third_term = (1 - ab_cur / ab_prev) ** 0.5 * noise
+            else:
+                third_term = var ** 0.5 * noise
+            x = first_term + second_term + third_term
         return x

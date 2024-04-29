@@ -14,7 +14,7 @@ from tqdm import tqdm
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg, unet_res1d_medium_cfg, \
-    unet_res1d_big_cfg
+    unet_res1d_big_cfg, bi_lstm_cfg
 from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
@@ -219,7 +219,7 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
     # dataloader = get_dataloader(path, batch_size, slice_length)
     dataloader = get_signal_dataloader(path, batch_size, slice_length)
     net = net.to(device).double()  # 将网络放到GPU上, 并且将网络的参数类型设置为double
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.HuberLoss()
     optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
 
     i = 0
@@ -228,17 +228,17 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
         for x, _ in tqdm(dataloader, desc='Epoch {}'.format(e)):
             current_batch_size = x.shape[0]
-            x = x.to(device)  # Convert x to float32
+            x = x.to(device)  # Convert x to float32， x是纯净信号
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             # eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布  # 生成一个噪声
             # TODO
-            eps = make_noise(x).to(device).double()  # 生成一个噪声
-            # x_t = ddpm.sample_forward1D(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
+            eps = make_noise(x).to(device).double()  # 根据x生成一个噪声
+            x_t = ddpm.sample_forward(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
 
-            x_t = x + eps  # 叠加噪声
-            eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器
+            # x_t = x + eps  # 叠加噪声
+            eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器, 通过x_t和t生成一个噪声
 
-            loss = loss_fn(eps_theta + 1, x + 1)  # 计算eps_theta和x的损失, 为什么要加1呢？因为x的范围是-1到1，加1之后变成0到2
+            loss = loss_fn(eps_theta, eps)  # 计算eps_theta和x的损失, 为什么要加1呢？因为x的范围是-1到1，加1之后变成0到2
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -263,9 +263,10 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
 
 
 configs = [
-    convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, unet_res_cfg,  # 5, 图片处理
-    convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 信号处理
-    unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 信号处理
+    convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, unet_res_cfg,  # 0-4, 图片处理
+    convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 5-7， 信号处理
+    unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 8-10， 信号处理
+    bi_lstm_cfg,  # 11， 信号处理
 ]
 
 
@@ -350,18 +351,17 @@ def predict():
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
     n_steps = 1000
-    config_id = 8
+    config_id = 11
     device = 'cuda'
-    model_path = './model/reduce_noise_model_unet1d_res_change_output.pth'
+    model_path = './model/reduce_noise_model_bi_lstm.pth'
     data_path = './data'
 
     config = configs[config_id]
     net = build_network(config, n_steps)
-    ddpm = DDPM(device, n_steps)
-
-    train(ddpm, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512,
-          log_dir='./run/04261827', n_epochs=2000)
     rnddim = Reduce_noise(device, n_steps)
+
+    train(rnddim, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512,
+          log_dir='./run/04291443', n_epochs=50)
     net.load_state_dict(torch.load(model_path))
     sample_signals(rnddim, net, n_sample=1000, device=device, input_path='./data')
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from model import bi_lstm
 from utils.dataset import get_shape
 
 
@@ -27,6 +28,37 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, t):
         return self.embedding(t)
+
+
+class BiLSTM(nn.Module):
+    def __init__(self, n_steps, config):
+        super().__init__()
+        embed_size = get_shape()[2]
+        self.embedding = PositionalEncoding(n_steps, embed_size)
+        self.LSTM = nn.LSTM(embed_size, config.lstm_hidden_size,
+                            num_layers=config.num_layers, batch_first=True,
+                            bidirectional=True)
+        # 因为是双向 LSTM, 所以要乘2
+        self.ffn = nn.Linear(config.lstm_hidden_size * 2,
+                             config.dense_hidden_size)
+        self.relu = nn.ReLU()
+        self.classifier = nn.Linear(config.dense_hidden_size,
+                                    config.num_outputs)
+
+    def forward(self, inputs):
+        # shape: (batch_size, max_seq_length, embed_size)
+        embed = self.embedding(inputs)
+        # shape: (batch_size, max_seq_length, lstm_hidden_size * 2)
+        lstm_hidden_states, _ = self.LSTM(embed)
+        # LSTM 的最后一个时刻的隐藏状态, 即句向量
+        # shape: (batch, lstm_hidden_size * 2)
+        lstm_hidden_states = lstm_hidden_states[:, -1, :]
+        # shape: (batch, dense_hidden_size)
+        ffn_outputs = self.relu(self.ffn(lstm_hidden_states))
+        # shape: (batch, num_outputs)
+        logits = self.classifier(ffn_outputs)
+
+        return logits
 
 
 class ResidualBlock(nn.Module):
@@ -491,6 +523,11 @@ unet_res1d_big_cfg = {
     'residual': True
 }
 
+bi_lstm_cfg = {
+    'type': 'BiLSTM',
+    'config': bi_lstm.BI_LSTM_Config()
+}
+
 
 def build_network(config: dict, n_steps):
     network_type = config.pop('type')
@@ -498,7 +535,8 @@ def build_network(config: dict, n_steps):
         'ConvNet': ConvNet,
         'UNet': UNet,
         'ConvNet1D': ConvNet1D,
-        'UNet1D': UNet1D
+        'UNet1D': UNet1D,
+        'BiLSTM': BiLSTM
     }
 
     network_cls = network_mapping.get(network_type)
@@ -537,14 +575,6 @@ class DDPM:
         if eps is None:
             eps = torch.randn_like(x)
         res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
-        return res
-
-    def sample_forward1D(self, x, t, eps=None):  # x是一维信号， eps是噪声, t是随机数，此步是加噪声
-        alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
-        if eps is None:
-            eps = torch.randn_like(x)
-        res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
-
         return res
 
     def sample_backward(self, img_shape, net, device, simple_var=True,

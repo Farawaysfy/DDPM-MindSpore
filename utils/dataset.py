@@ -63,14 +63,14 @@ class Signal:
         if self.add_noise:
             original, data = generate_mixed_signal_data(data)
             # 绘制原始信号和带噪声的信号
-            plt.figure(figsize=(18, 6))
-            plt.plot(data[0][0], label='Noisy Signal', linestyle='--', linewidth=1)
-            plt.plot(original[0][0], label='Original Signal', linewidth=1)
-            plt.xlabel("Sample Index")
-            plt.ylabel("Amplitude")
-            plt.legend()
-            plt.show()
-            plt.close()
+            # plt.figure(figsize=(18, 6))
+            # plt.plot(data[0][0], label='Noisy Signal', linestyle='--', linewidth=1)
+            # plt.plot(original[0][0], label='Original Signal', linewidth=1)
+            # plt.xlabel("Sample Index")
+            # plt.ylabel("Amplitude")
+            # plt.legend()
+            # plt.show()
+            # plt.close()
         # print("data[0]=", data[0])
         slices = []
         if self.slice_type == 'cut':
@@ -160,10 +160,10 @@ class Signals(Dataset):
                 target.append(selected_column.index[j].split('_')[0])
         # 将data，target转换为numpy数组
         # 对齐数据, 根据最短数据进行截取
-        if self.slice_type != 'cut' and self.slice_type != 'window':
-            min_length = min([len(data[i][0]) for i in range(len(data))])
-            for i in range(len(data)):
-                data[i] = data[i][:, :min_length]
+        # if self.slice_type != 'cut' and self.slice_type != 'window':
+        #     min_length = min([len(data[i][0]) for i in range(len(data))])
+        #     for i in range(len(data)):
+        #         data[i] = data[i][:, :min_length]
         data = np.array(data)
         target = np.array(target)
         return data, target
@@ -351,16 +351,11 @@ def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_ra
     amplitude = np.random.uniform(*amplitude_range)
     noises = []
     for i in range(num_samples):
-        # 生成正弦波信号或复合信号
-        if np.random.rand() > 0.5:
-            # 生成正弦波信号
-            signal = amplitude * np.sin(2 * np.pi * frequency * t)
-        else:
-            # 生成复合信号
-            signal = amplitude * (np.sin(2 * np.pi * frequency * t) + np.sin(2 * np.pi * 0.5 * frequency * t))
-
+        cur_signal = original_signal[i][0]
+        # cur_plot = FFTPlot(cur_signal, 'original', fs=5120)
+        # cur_plot.showOriginal()
         # 计算信号功率
-        signal_power = np.mean(signal ** 2)
+        signal_power = np.mean(original_signal[i] ** 2)
 
         # 随机选择信噪比
         snr_db = np.random.uniform(*snr_range)
@@ -368,7 +363,9 @@ def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_ra
         noise_power = signal_power / snr_linear
 
         # 生成噪声
-        temp = np.random.normal(0, np.sqrt(noise_power), signal.shape).astype(np.float16)
+        temp = np.random.normal(0, np.sqrt(noise_power), cur_signal.shape).astype(np.float16)
+        # noise = FFTPlot(temp, 'noise', fs=5120)
+        # noise.showOriginal()
         noises.append([temp])
 
     noises = np.array(noises)
@@ -380,11 +377,7 @@ if __name__ == '__main__':
     dataSet = Signals('../data', slice_length=512, slice_type='cut')
 
     # noise, data = generate_mixed_signal_data(dataSet.data)
-    fft = FFTPlot(dataSet.data[0][0], 'original', fs=5120)
-    fft.showOriginal()
-
-    noise_fft = FFTPlot(make_noise(), 'noisy', fs=5120)
-    noise_fft.showOriginal()
+    make_noise(dataSet.data)
 
     # noise_dataset = Signals('../data', slice_length=512, slice_type='cut', add_noise=True)
     # noise_fft = FFTPlot(noise_dataset.data[0][0], 'noisy', fs=5120)
