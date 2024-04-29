@@ -34,7 +34,7 @@ class BiLSTM(nn.Module):
     def __init__(self, n_steps, config):
         super().__init__()
         embed_size = get_shape()[2]
-        self.embedding = PositionalEncoding(n_steps, embed_size)
+        self.pe = PositionalEncoding(n_steps, embed_size)
         self.LSTM = nn.LSTM(embed_size, config.lstm_hidden_size,
                             num_layers=config.num_layers, batch_first=True,
                             bidirectional=True)
@@ -45,11 +45,12 @@ class BiLSTM(nn.Module):
         self.classifier = nn.Linear(config.dense_hidden_size,
                                     config.num_outputs)
 
-    def forward(self, inputs):
+    def forward(self, x, t):
         # shape: (batch_size, max_seq_length, embed_size)
-        embed = self.embedding(inputs)
+        pe = self.pe(t).reshape(t.shape[0], -1, 1)
+        x = x + pe
         # shape: (batch_size, max_seq_length, lstm_hidden_size * 2)
-        lstm_hidden_states, _ = self.LSTM(embed)
+        lstm_hidden_states, _ = self.LSTM(x)
         # LSTM 的最后一个时刻的隐藏状态, 即句向量
         # shape: (batch, lstm_hidden_size * 2)
         lstm_hidden_states = lstm_hidden_states[:, -1, :]
@@ -58,7 +59,7 @@ class BiLSTM(nn.Module):
         # shape: (batch, num_outputs)
         logits = self.classifier(ffn_outputs)
 
-        return logits
+        return logits.view(-1, get_shape()[1], get_shape()[2])
 
 
 class ResidualBlock(nn.Module):

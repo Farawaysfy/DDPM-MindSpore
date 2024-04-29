@@ -361,7 +361,7 @@ if __name__ == '__main__':
     rnddim = Reduce_noise(device, n_steps)
 
     train(rnddim, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512,
-          log_dir='./run/04291443', n_epochs=50)
+          log_dir='./run/04291517', n_epochs=50)
     net.load_state_dict(torch.load(model_path))
     sample_signals(rnddim, net, n_sample=1000, device=device, input_path='./data')
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)

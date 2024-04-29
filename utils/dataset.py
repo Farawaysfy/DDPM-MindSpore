@@ -351,11 +351,11 @@ def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_ra
     amplitude = np.random.uniform(*amplitude_range)
     noises = []
     for i in range(num_samples):
-        cur_signal = original_signal[i][0]
+        cur_signal = original_signal[i][0].cpu().detach().numpy()
         # cur_plot = FFTPlot(cur_signal, 'original', fs=5120)
         # cur_plot.showOriginal()
         # 计算信号功率
-        signal_power = np.mean(original_signal[i] ** 2)
+        signal_power = np.mean(cur_signal ** 2)
 
         # 随机选择信噪比
         snr_db = np.random.uniform(*snr_range)

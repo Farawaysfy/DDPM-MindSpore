@@ -1,4 +1,5 @@
 # coding:utf8
+from utils.dataset import get_shape
 
 
 class BI_LSTM_Config:
@@ -17,4 +18,4 @@ class BI_LSTM_Config:
         self.lstm_hidden_size = 128
         self.dense_hidden_size = 128
         self.num_layers = 1
-        self.num_outputs = 2
+        self.num_outputs = get_shape()[2]
