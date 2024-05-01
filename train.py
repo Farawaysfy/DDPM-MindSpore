@@ -14,7 +14,7 @@ from tqdm import tqdm
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg, unet_res1d_medium_cfg, \
-    unet_res1d_big_cfg, bi_lstm_cfg
+    unet_res1d_big_cfg, bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg
 from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
@@ -200,7 +200,7 @@ def vit_train(dataset, config=None):
         "shape": (3, 256, 256),
         "num_classes": 8
     } if config is None else config
-    train_model(config, dataset)
+    train_DDPM(config, dataset)
 
 
 def plot_signal(signal, title, subplot_position):
@@ -236,9 +236,13 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             x_t = ddpm.sample_forward(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
 
             # x_t = x + eps  # 叠加噪声
-            eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器, 通过x_t和t生成一个噪声
+            x_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器, x_theta是去噪之后的信号
 
-            loss = loss_fn(eps_theta, eps)  # 计算eps_theta和x的损失, 为什么要加1呢？因为x的范围是-1到1，加1之后变成0到2
+            # 将x_theta和x缩放到同一尺度
+            mx = max(torch.max(x_theta), -torch.min(x_theta))
+            x_mx = max(torch.max(x), -torch.min(x))
+            x = x / x_mx * mx
+            loss = loss_fn(x_theta, x)  # 计算x_theta和x的损失, 为什么要加1呢？因为x的范围是-1到1，加1之后变成0到2
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -251,14 +255,14 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             plot_signal(x, 'x', (2, 2, 1))
             plot_signal(x_t, 'x_t', (2, 2, 2))
             plot_signal(eps, 'eps', (2, 2, 3))
-            plot_signal(eps_theta, 'eps_theta', (2, 2, 4))
+            plot_signal(x_theta, 'x_theta', (2, 2, 4))
             writer.add_figure('signal process', plt.gcf(), i)
             writer.add_scalar('step loss', loss.item(), i)
             i += 1
 
         total_loss /= len(dataloader.dataset)
         writer.add_scalar('epochs loss', total_loss, e)
-        torch.save(net.state_dict(), ckpt_path)
+        torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
     print('Done')
 
 
@@ -266,7 +270,7 @@ configs = [
     convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, unet_res_cfg,  # 0-4, 图片处理
     convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 5-7， 信号处理
     unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 8-10， 信号处理
-    bi_lstm_cfg,  # 11， 信号处理
+    bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg  # 11， 信号处理
 ]
 
 
@@ -348,22 +352,31 @@ def predict():
     print(f'预测结果：{same}个相同，占比{percent}')
 
 
-if __name__ == '__main__':
-    os.makedirs('work_dirs', exist_ok=True)
+def train_DDPM(device, model_name, data_path, config_id, log_dir, n_epochs=500):
     n_steps = 1000
-    config_id = 11
-    device = 'cuda'
-    model_path = './model/reduce_noise_model_bi_lstm.pth'
-    data_path = './data'
-
     config = configs[config_id]
     net = build_network(config, n_steps)
     rnddim = Reduce_noise(device, n_steps)
+    train(rnddim, net, device=device, ckpt_path=model_name, path=data_path, slice_length=512, log_dir=log_dir,
+          n_epochs=n_epochs)
 
-    train(rnddim, net, device=device, ckpt_path=model_path, path=data_path, slice_length=512,
-          log_dir='./run/04291443', n_epochs=50)
-    net.load_state_dict(torch.load(model_path))
-    sample_signals(rnddim, net, n_sample=1000, device=device, input_path='./data')
+    net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))
+    sample_signals(rnddim, net, n_sample=10, device=device, input_path='./data')
+
+
+if __name__ == '__main__':
+    os.makedirs('work_dirs', exist_ok=True)
+    device = 'cuda'
+    model_name = ['reduce_noise_model_bi_lstm_change_output_huber_loss.pth',
+                  'reduce_noise_model_bi_lstm_medium_change_output_huber_loss.pth',
+                  'reduce_noise_model_bi_lstm_big_change_output_huber_loss.pth']
+    data_path = './data'
+    config_ids = [11, 12, 13]
+    log_dirs = ['./run/05011150', './run/05011250', './run/05013150']
+
+    for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
+        train_DDPM(device, model, data_path, config_id, log_dir)
+
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
     # dataset = PictureData('./data', get_shape(),
     #                       'stft', slice_length=512)

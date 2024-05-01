@@ -1,8 +1,9 @@
 # coding:utf8
+from utils.dataset import get_shape
 
 
 class BI_LSTM_Config:
-    def __init__(self):
+    def __init__(self, lstm_hidden_size=128, dense_hidden_size=128, num_layers=1, num_outputs=get_shape()[-1]):
         # 训练配置
         # self.seed = 22
         # self.batch_size = 64
@@ -14,7 +15,7 @@ class BI_LSTM_Config:
         # self.save_path = '../model_parameters/BiLSTM_SA.bin'
 
         # 模型配置
-        self.lstm_hidden_size = 128
-        self.dense_hidden_size = 128
-        self.num_layers = 1
-        self.num_outputs = 2
+        self.lstm_hidden_size = lstm_hidden_size
+        self.dense_hidden_size = dense_hidden_size
+        self.num_layers = num_layers
+        self.num_outputs = num_outputs

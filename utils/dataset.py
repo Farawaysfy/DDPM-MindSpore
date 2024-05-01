@@ -286,21 +286,9 @@ def generate_mixed_signal_data(signals: np.ndarray, frequency_range=(10, 1000),
     num_samples, sample_length = len(signals), len(signals[0][0])
     signals.reshape(-1, sample_length)
     noisy_signals = np.zeros((num_samples, 1, sample_length), dtype=np.float16)
-    t = np.linspace(0, 1, sample_length, dtype=np.float16)
 
     for i in range(num_samples):
-        # 随机选择频率和幅值
-        frequency = np.random.uniform(*frequency_range)
-        amplitude = np.random.uniform(*amplitude_range)
-
-        # 生成正弦波信号或复合信号
-        if np.random.rand() > 0.5:
-            # 生成正弦波信号
-            signal = amplitude * np.sin(2 * np.pi * frequency * t)
-        else:
-            # 生成复合信号
-            signal = amplitude * (np.sin(2 * np.pi * frequency * t) + np.sin(2 * np.pi * 0.5 * frequency * t))
-
+        signal = signals[i]
         # 计算信号功率
         signal_power = np.mean(signal ** 2)
 
@@ -312,7 +300,6 @@ def generate_mixed_signal_data(signals: np.ndarray, frequency_range=(10, 1000),
         # 生成噪声并添加到信号上
         noise = np.random.normal(0, np.sqrt(noise_power), signal.shape).astype(np.float16)
         noisy_signal = signal + noise
-
         signals[i] = signal
         noisy_signals[i] = noisy_signal
 
@@ -345,17 +332,13 @@ def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_ra
     :return: 原始信号和带噪声的信号
     """
     num_samples, sample_length = original_signal.shape[0], original_signal.shape[2]
-    t = np.linspace(0, 1, sample_length, dtype=np.float16)
-    # 随机选择频率和幅值
-    frequency = np.random.uniform(*frequency_range)
-    amplitude = np.random.uniform(*amplitude_range)
     noises = []
     for i in range(num_samples):
-        cur_signal = original_signal[i][0]
+        cur_signal = original_signal[i][0].cpu().detach().numpy()
         # cur_plot = FFTPlot(cur_signal, 'original', fs=5120)
         # cur_plot.showOriginal()
         # 计算信号功率
-        signal_power = np.mean(original_signal[i] ** 2)
+        signal_power = np.mean(cur_signal ** 2)
 
         # 随机选择信噪比
         snr_db = np.random.uniform(*snr_range)

@@ -48,7 +48,7 @@ class Reduce_noise(DDIM):
                                     dtype=torch.long).to(device).unsqueeze(1)
             eps = net(x, t_tensor)
             var = eta * (1 - ab_prev) / (1 - ab_cur) * (1 - ab_cur / ab_prev)
-            noise = make_noise(x)
+            noise = make_noise(x).to(device)
             first_term = (ab_prev / ab_cur) ** 0.5 * x
             second_term = ((1 - ab_prev - var) ** 0.5 -
                            (ab_prev * (1 - ab_cur) / ab_cur) ** 0.5) * eps
@@ -57,4 +57,7 @@ class Reduce_noise(DDIM):
             else:
                 third_term = var ** 0.5 * noise
             x = first_term + second_term + third_term
+            # 将x缩放到-1到1之间,缩放!不是裁剪, 防止x的值过大或过小
+            while x.max() > 1 or x.min() < -1:
+                x = (x - x.min()) / (x.max() - x.min()) * 2 - 1
         return x

@@ -525,9 +525,18 @@ unet_res1d_big_cfg = {
 
 bi_lstm_cfg = {
     'type': 'BiLSTM',
-    'config': bi_lstm.BI_LSTM_Config()
+    'config': bi_lstm.BI_LSTM_Config(128, 128, 1)
 }
 
+bi_lstm_medium_cfg = {
+    'type': 'BiLSTM',
+    'config': bi_lstm.BI_LSTM_Config(256, 256, 2)
+}
+
+bi_lstm_big_cfg = {
+    'type': 'BiLSTM',
+    'config': bi_lstm.BI_LSTM_Config(512, 512, 4)
+}
 
 def build_network(config: dict, n_steps):
     network_type = config.pop('type')
