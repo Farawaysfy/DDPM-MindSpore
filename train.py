@@ -21,7 +21,7 @@ from utils.FFTPlot import FFTPlot
 from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
     tensor2img, make_noise, Signals
 
-batch_size = 1024
+batch_size = 512
 _exp_name = "sample"
 
 
