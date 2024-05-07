@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
+from torch import tensor
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -14,7 +15,8 @@ from tqdm import tqdm
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
     unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg, unet_res1d_medium_cfg, \
-    unet_res1d_big_cfg, bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg
+    unet_res1d_big_cfg, bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg, convnet1d_big_classify_cfg, \
+    convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg
 from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
 from utils.FFTPlot import FFTPlot
@@ -270,7 +272,8 @@ configs = [
     convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, unet_res_cfg,  # 0-4, 图片处理
     convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 5-7， 信号处理
     unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 8-10， 信号处理
-    bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg  # 11， 信号处理
+    bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg,  # 11-13， 信号处理
+    convnet1d_big_classify_cfg, convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg,  # 14-16， 信号预测
 ]
 
 
@@ -364,18 +367,62 @@ def train_DDPM(device, model_name, data_path, config_id, log_dir, n_epochs=500):
     sample_signals(rnddim, net, n_sample=10, device=device, input_path='./data')
 
 
+def cnn_train(net, dataloader, device, ckpt_path, path, slice_length, log_dir, n_epochs):  # 训练cnn1d分类模型
+    createFolder(log_dir)
+    writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
+    net = net.to(device).half()
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
+
+    i = 0
+    for e in range(n_epochs):
+        total_loss = 0
+        total_acc = 0
+
+        for x, y in tqdm(dataloader, desc='Epoch {}'.format(e)):
+            current_batch_size = x.shape[0]
+            x = x.to(device)
+            y = y.to(device)
+            logits = net(x)
+            loss = loss_fn(logits, y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item() * current_batch_size
+            total_acc += (logits.argmax(dim=-1) == y).float().mean().item() * current_batch_size
+            writer.add_scalar('step loss', loss.item(), i)
+            i += 1
+
+        total_loss /= len(dataloader.dataset)
+        total_acc /= len(dataloader.dataset)
+        writer.add_scalar('epochs loss', total_loss, e)
+        writer.add_scalar('epochs acc', total_acc, e)
+        torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
+    print('Done')
+
+
+def train_classification(device, model_name, data_path, config_id, log_dir, path='./data', slice_length=512,
+                         n_epochs=500, dataloader=None):
+    n_steps = 1000
+    config = configs[config_id]
+    net = build_network(config, n_steps)
+    dataloader = get_signal_dataloader(path, batch_size, slice_length) if dataloader is None else dataloader
+    cnn_train(net, dataloader=dataloader, device=device, ckpt_path=model_name, path=data_path, slice_length=512, log_dir=log_dir,
+              n_epochs=n_epochs)
+
+
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda'
-    model_name = ['reduce_noise_model_bi_lstm_change_output_huber_loss.pth',
-                  'reduce_noise_model_bi_lstm_medium_change_output_huber_loss.pth',
-                  'reduce_noise_model_bi_lstm_big_change_output_huber_loss.pth']
+    model_name = ['classify_cnn1d_small_best300_512batch_noisy.ckpt',
+                  'classify_cnn1d_medium_best300_512batch_noisy.ckpt',
+                  'classify_cnn1d_big_best300_512batch_noisy.ckpt']
     data_path = './data'
-    config_ids = [11, 12, 13]
-    log_dirs = ['./run/05011150', './run/05011250', './run/05013150']
-
+    config_ids = [16, 15, 14]
+    log_dirs = ['./run/05071617', './run/05071717', './run/05071817']
+    dataloader = get_signal_dataloader(data_path, batch_size, 512, add_noise=True)
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
-        train_DDPM(device, model, data_path, config_id, log_dir)
+        train_classification(device, model, data_path, config_id, log_dir, dataloader=dataloader, n_epochs=300)
 
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
     # dataset = PictureData('./data', get_shape(),

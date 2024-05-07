@@ -157,7 +157,7 @@ class Signals(Dataset):
                 temp = selected_column[j].copy()
                 temp = temp.reshape(1, len(temp))
                 data.append(temp)
-                target.append(selected_column.index[j].split('_')[0])
+                target.append(int(selected_column.index[j].split('_')[0]))
         # 将data，target转换为numpy数组
         # 对齐数据, 根据最短数据进行截取
         # if self.slice_type != 'cut' and self.slice_type != 'window':
@@ -312,8 +312,8 @@ def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
-def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='window') -> DataLoader:
-    dataset = Signals(path, slice_length=slice_length, slice_type=slice_type)
+def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='window', add_noise=False) -> DataLoader:
+    dataset = Signals(path, slice_length=slice_length, slice_type=slice_type, add_noise=add_noise)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 

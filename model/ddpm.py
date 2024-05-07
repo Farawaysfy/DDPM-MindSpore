@@ -155,6 +155,29 @@ class ConvNet1D(nn.Module):
         return x
 
 
+class ConvNet1DClassify(nn.Module):
+
+    def __init__(self,
+                 n_steps,
+                 intermediate_channels=[10, 20, 40],
+                 pe_dim=10):
+        super().__init__()
+        C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
+
+        self.residual_blocks = nn.ModuleList()
+        prev_channel = C
+        for channel in intermediate_channels:
+            self.residual_blocks.append(ResidualBlock1D(prev_channel, channel))
+            prev_channel = channel
+        self.output_layer = nn.Conv1d(prev_channel, C, 3, 1, 1)
+
+    def forward(self, x):
+        for m_x in self.residual_blocks:
+            x = m_x(x)
+        x = self.output_layer(x)
+        return x
+
+
 class ConvNet(nn.Module):
 
     def __init__(self,
@@ -538,6 +561,24 @@ bi_lstm_big_cfg = {
     'type': 'BiLSTM',
     'config': bi_lstm.BI_LSTM_Config(512, 512, 4)
 }
+convnet1d_big_classify_cfg = {
+    'type': 'ConvNet1DClassify',
+    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160, 40, 40, 10, 10],
+    'pe_dim': 8,
+}
+
+convnet1d_medium_classify_cfg = {
+    'type': 'ConvNet1DClassify',
+    'intermediate_channels': [20, 20, 40, 40, 80, 80, 40, 40, 10, 10],
+    'pe_dim': 8,
+}
+
+convnet1d_small_classify_cfg = {
+    'type': 'ConvNet1DClassify',
+    'intermediate_channels': [10, 20, 20, 10, 10],
+    'pe_dim': 8,
+}
+
 
 def build_network(config: dict, n_steps):
     network_type = config.pop('type')
@@ -546,7 +587,8 @@ def build_network(config: dict, n_steps):
         'UNet': UNet,
         'ConvNet1D': ConvNet1D,
         'UNet1D': UNet1D,
-        'BiLSTM': BiLSTM
+        'BiLSTM': BiLSTM,
+        'ConvNet1DClassify': ConvNet1DClassify
     }
 
     network_cls = network_mapping.get(network_type)
