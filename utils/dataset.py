@@ -13,7 +13,7 @@ from torch.utils.data import Dataset
 from torchvision.datasets import VisionDataset
 from tqdm import tqdm
 
-from utils.FFTPlot import FFTPlot, processImg
+from utils.fft_plot import FFTPlot, processImg
 
 
 def createFolder(path):
@@ -21,20 +21,24 @@ def createFolder(path):
         os.makedirs(path)
     else:
         # 删除文件夹下所有文件
+        import shutil
+
+        # Delete all files and directories under the given path
         for root, dirs, files in os.walk(path):
             for name in files:
                 os.remove(os.path.join(root, name))
             for name in dirs:
-                os.rmdir(os.path.join(root, name))
+                shutil.rmtree(os.path.join(root, name))
 
 
 class Signal:
-    def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut', add_noise=False):
+    def __init__(self, path, fs=5120, slice_length=1024, slice_type='cut', add_noise=False, windows_rate=0.5):
         self.path = path
         self.slice_length = slice_length
         self.slice_type = slice_type
         self.fs = fs
         self.add_noise = add_noise
+        self.windows_rate = windows_rate
         dic = {
             'Aligned': 0,
             'Bearing': 1,
@@ -85,10 +89,10 @@ class Signal:
             for v in data:
                 temp = []
                 left, right = 0, self.slice_length
-                while right < len(v[0]):  # 信号重合度为0.5
+                while right < len(v[0]):  # 信号重合度为1 - self.windows_rate
                     temp.append(np.array(v[0][left:right]))
-                    left += self.slice_length // 2
-                    right += self.slice_length // 2
+                    left += int(self.slice_length * self.windows_rate)
+                    right += int(self.slice_length * self.windows_rate)
                 slices.append(temp)
             slices_labels = [str(self.label) + "_" + str(i) for i in range(len(slices[0]))]
         else:
@@ -133,8 +137,8 @@ class Signal:
 
 
 class Signals(Dataset):
-    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', add_noise=False):
-        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type, add_noise) for f in os.listdir(path)
+    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', add_noise=False, windows_rate=0.5):
+        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type, add_noise, windows_rate) for f in os.listdir(path)
                         if
                         f.endswith('.mat')]
         self.labels = [signal.label for signal in self.signals]

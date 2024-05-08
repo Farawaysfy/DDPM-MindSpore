@@ -163,21 +163,33 @@ class ConvNet1DClassify(nn.Module):
         super().__init__()
         C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
 
-        self.residual_blocks = nn.ModuleList()
+        self.cnn1d_blocks = nn.ModuleList()
         prev_channel = C
         for channel in intermediate_channels:
-            self.residual_blocks.append(ResidualBlock1D(prev_channel, channel))
+            self.cnn1d_blocks.append(nn.Sequential(
+                nn.Conv1d(prev_channel, channel, 3, 1, 1),
+                nn.ReLU(),
+                nn.BatchNorm1d(channel)
+            ))
             prev_channel = channel
-        self.output_layer = nn.Conv1d(prev_channel, C, 3, 1, 1)
+            if W <= 32:
+                self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
+            else:
+                self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
+                self.cnn1d_blocks[-1].add_module('max pool', nn.MaxPool1d(2))
+                W //= 2
 
-        self.fc = nn.Linear(W, out_dim)
+        self.fces = nn.Sequential(
+            nn.Linear(W * prev_channel, W // 2),
+            nn.Dropout(0.5),
+            nn.ReLU(),
+            nn.Linear(W // 2, out_dim)
+        )
 
     def forward(self, x):
-        for m_x in self.residual_blocks:
+        for m_x in self.cnn1d_blocks:
             x = m_x(x)
-        x = self.output_layer(x)
-
-        return self.fc(x.flatten(1))
+        return self.fces(x.flatten(1))
 
 
 class ConvNet(nn.Module):
@@ -565,19 +577,19 @@ bi_lstm_big_cfg = {
 }
 convnet1d_big_classify_cfg = {
     'type': 'ConvNet1DClassify',
-    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160, 40, 40, 10, 10],
+    'intermediate_channels': [20, 40, 80, 160, 160, 80, 40, 20],
     'out_dim': 8,
 }
 
 convnet1d_medium_classify_cfg = {
     'type': 'ConvNet1DClassify',
-    'intermediate_channels': [20, 20, 40, 40, 80, 80, 40, 40, 10, 10],
+    'intermediate_channels': [20, 40,  80, 40, 20],
     'out_dim': 8,
 }
 
 convnet1d_small_classify_cfg = {
     'type': 'ConvNet1DClassify',
-    'intermediate_channels': [10, 20, 20, 10, 10],
+    'intermediate_channels': [10, 20, 10],
     'out_dim': 8,
 }
 

@@ -11,6 +11,7 @@ from torch import tensor
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from utils.early_stop import EarlyStopping
 
 from model.ddim import DDIM
 from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
@@ -19,7 +20,7 @@ from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cf
     convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg
 from model.reduce_noise_ddim import Reduce_noise
 from model.vit import VisionTransformer
-from utils.FFTPlot import FFTPlot
+from utils.fft_plot import FFTPlot
 from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
     tensor2img, make_noise, Signals
 
@@ -373,18 +374,19 @@ def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     net = net.to(device).half()
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
-
-    i = 0
+    optimizer = torch.optim.Adamax(net.parameters(), 1e-3, weight_decay=1e-5)
+    ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
     best_acc = 0
+    train_acces = []
+    train_losses = []
+    test_acces = []
+    test_losses = []
     for e in range(n_epochs):
         train_acc = 0
         train_loss = 0
         test_acc = 0
         test_loss = 0
-
-        for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):
-            current_batch_size = x.shape[0]
+        for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device)
             y = y.to(device).long()
             logits = net(x)
@@ -393,21 +395,25 @@ def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir
             loss.backward()  # 反向传播
             optimizer.step()  # 更新参数
             train_acc += (logits.argmax(dim=-1) == y).float().mean()
-            train_loss += loss.item() * current_batch_size
-        for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):
-            current_batch_size = x.shape[0]
+            train_loss += loss.item()
+        for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):  # 测试
             x = x.to(device)
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
             test_acc += (logits.argmax(dim=-1) == y).float().mean()
-            test_loss += loss.item() * current_batch_size
-        train_acc /= len(train_dataloader)
-        train_loss /= len(train_dataloader)
-        test_acc /= len(test_dataloader)
-        test_loss /= len(test_dataloader)
-        writer.add_scalars('acc', {'train': train_acc, 'test': test_acc}, e)
-        writer.add_scalars('loss', {'train': train_loss, 'test': test_loss}, e)
+            test_loss += loss.item()
+        train_acces.append(train_acc / len(train_dataloader))
+        train_losses.append(train_loss / len(train_dataloader))
+        test_acces.append(test_acc / len(test_dataloader))
+        test_losses.append(test_loss / len(test_dataloader))
+        writer.add_scalars('acc', {'train': train_acces[-1], 'test': test_acces[-1]}, e)
+        writer.add_scalars('loss', {'train': train_losses[-1], 'test': test_losses[-1]}, e)
+        # 检测是否过拟合，如果过拟合则停止训练, Early Stop
+        ealy_stop(test_losses[-1], net)
+        if ealy_stop.early_stop:
+            print('Early stopping')
+            break
         if test_acc > best_acc:
             torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
             best_acc = test_acc
@@ -426,12 +432,12 @@ if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda'
     data_path = './data'
-    model_name = ['classify_cnn1d_small_best300_512batch_noisy.ckpt',
+    config_ids = [14, 15, 16]
+    model_name = ['classify_cnn1d_big_best300_512batch_noisy.ckpt',
                   'classify_cnn1d_medium_best300_512batch_noisy.ckpt',
-                  'classify_cnn1d_big_best300_512batch_noisy.ckpt']
-    config_ids = [16, 15, 14]
+                  'classify_cnn1d_small_best300_512batch_noisy.ckpt']
     log_dirs = ['./run/05071617', './run/05071717', './run/05071817']
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=True)
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=True, windows_rate=0.05)
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_data = tensor(train_data)
     test_data = tensor(test_data)
@@ -444,12 +450,11 @@ if __name__ == '__main__':
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
         train_classification(device, model, config_id, log_dir, train_dataloader=train_dataloader,
                              test_dataloader=test_dataloader, n_epochs=300)
-    model_name = ['classify_cnn1d_small_best300_512batch_origin.ckpt',
+    model_name = ['classify_cnn1d_big_best300_512batch_origin.ckpt',
                   'classify_cnn1d_medium_best300_512batch_origin.ckpt',
-                  'classify_cnn1d_big_best300_512batch_origin.ckpt']
-    config_ids = [16, 15, 14]
+                  'classify_cnn1d_small_best300_512batch_origin.ckpt']
     log_dirs = ['./run/05081017', './run/05081117', './run/05081217']
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False)
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05)
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_data = tensor(train_data)
     test_data = tensor(test_data)
