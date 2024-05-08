@@ -367,7 +367,8 @@ def train_DDPM(device, model_name, data_path, config_id, log_dir, n_epochs=500):
     sample_signals(rnddim, net, n_sample=10, device=device, input_path='./data')
 
 
-def cnn_train(net, dataloader, device, ckpt_path, path, slice_length, log_dir, n_epochs):  # 训练cnn1d分类模型
+def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
+              n_epochs):  # 训练cnn1d分类模型
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     net = net.to(device).half()
@@ -375,55 +376,92 @@ def cnn_train(net, dataloader, device, ckpt_path, path, slice_length, log_dir, n
     optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
 
     i = 0
+    best_acc = 0
     for e in range(n_epochs):
-        total_loss = 0
-        total_acc = 0
+        train_acc = 0
+        train_loss = 0
+        test_acc = 0
+        test_loss = 0
 
-        for x, y in tqdm(dataloader, desc='Epoch {}'.format(e)):
+        for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):
             current_batch_size = x.shape[0]
             x = x.to(device)
-            y = y.to(device)
+            y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item() * current_batch_size
-            total_acc += (logits.argmax(dim=-1) == y).float().mean().item() * current_batch_size
-            writer.add_scalar('step loss', loss.item(), i)
-            i += 1
-
-        total_loss /= len(dataloader.dataset)
-        total_acc /= len(dataloader.dataset)
-        writer.add_scalar('epochs loss', total_loss, e)
-        writer.add_scalar('epochs acc', total_acc, e)
-        torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
+            loss.backward()  # 反向传播
+            optimizer.step()  # 更新参数
+            train_acc += (logits.argmax(dim=-1) == y).float().mean()
+            train_loss += loss.item() * current_batch_size
+        for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):
+            current_batch_size = x.shape[0]
+            x = x.to(device)
+            y = y.to(device).long()
+            logits = net(x)
+            loss = loss_fn(logits, y)
+            test_acc += (logits.argmax(dim=-1) == y).float().mean()
+            test_loss += loss.item() * current_batch_size
+        train_acc /= len(train_dataloader)
+        train_loss /= len(train_dataloader)
+        test_acc /= len(test_dataloader)
+        test_loss /= len(test_dataloader)
+        writer.add_scalars('acc', {'train': train_acc, 'test': test_acc}, e)
+        writer.add_scalars('loss', {'train': train_loss, 'test': test_loss}, e)
+        if test_acc > best_acc:
+            torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
+            best_acc = test_acc
     print('Done')
 
 
-def train_classification(device, model_name, data_path, config_id, log_dir, path='./data', slice_length=512,
-                         n_epochs=500, dataloader=None):
-    n_steps = 1000
+def train_classification(device, model_name, config_id, log_dir, train_dataloader=None,
+                         test_dataloader=None, n_epochs=500):
     config = configs[config_id]
-    net = build_network(config, n_steps)
-    dataloader = get_signal_dataloader(path, batch_size, slice_length) if dataloader is None else dataloader
-    cnn_train(net, dataloader=dataloader, device=device, ckpt_path=model_name, path=data_path, slice_length=512, log_dir=log_dir,
-              n_epochs=n_epochs)
+    net = build_network(config)
+    cnn_train(net, train_dataloader=train_dataloader, test_dataloader=test_dataloader, device=device,
+              ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs)
 
 
 if __name__ == '__main__':
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda'
+    data_path = './data'
     model_name = ['classify_cnn1d_small_best300_512batch_noisy.ckpt',
                   'classify_cnn1d_medium_best300_512batch_noisy.ckpt',
                   'classify_cnn1d_big_best300_512batch_noisy.ckpt']
-    data_path = './data'
     config_ids = [16, 15, 14]
     log_dirs = ['./run/05071617', './run/05071717', './run/05071817']
-    dataloader = get_signal_dataloader(data_path, batch_size, 512, add_noise=True)
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=True)
+    train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
+    train_data = tensor(train_data)
+    test_data = tensor(test_data)
+    train_labels = tensor(train_labels)
+    test_labels = tensor(test_labels)
+    train_dataset = TensorDataset(train_data, train_labels)
+    test_dataset = TensorDataset(test_data, test_labels)
+    train_dataloader = DataLoader(train_dataset, batch_size=512, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=512, shuffle=False)
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
-        train_classification(device, model, data_path, config_id, log_dir, dataloader=dataloader, n_epochs=300)
-
+        train_classification(device, model, config_id, log_dir, train_dataloader=train_dataloader,
+                             test_dataloader=test_dataloader, n_epochs=300)
+    model_name = ['classify_cnn1d_small_best300_512batch_origin.ckpt',
+                  'classify_cnn1d_medium_best300_512batch_origin.ckpt',
+                  'classify_cnn1d_big_best300_512batch_origin.ckpt']
+    config_ids = [16, 15, 14]
+    log_dirs = ['./run/05081017', './run/05081117', './run/05081217']
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False)
+    train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
+    train_data = tensor(train_data)
+    test_data = tensor(test_data)
+    train_labels = tensor(train_labels)
+    test_labels = tensor(test_labels)
+    train_dataset = TensorDataset(train_data, train_labels)
+    test_dataset = TensorDataset(test_data, test_labels)
+    train_dataloader = DataLoader(train_dataset, batch_size=512, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=512, shuffle=False)
+    for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
+        train_classification(device, model, data_path, config_id, log_dir, train_dataloader=train_dataloader,
+                             test_dataloader=test_dataloader, n_epochs=300)
     # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
     # dataset = PictureData('./data', get_shape(),
     #                       'stft', slice_length=512)

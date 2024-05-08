@@ -157,7 +157,10 @@ class Signals(Dataset):
                 temp = selected_column[j].copy()
                 temp = temp.reshape(1, len(temp))
                 data.append(temp)
-                target.append(int(selected_column.index[j].split('_')[0]))
+                # 获取标签,并将标签转换为数字
+                label = eval(selected_column.index[j].split('_')[0])
+                target.append(label)
+
         # 将data，target转换为numpy数组
         # 对齐数据, 根据最短数据进行截取
         # if self.slice_type != 'cut' and self.slice_type != 'window':
