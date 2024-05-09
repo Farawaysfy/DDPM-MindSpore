@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from model import bi_lstm
 from utils.dataset import get_shape
 
 
@@ -31,19 +30,19 @@ class PositionalEncoding(nn.Module):
 
 
 class BiLSTM(nn.Module):
-    def __init__(self, n_steps, config):
+    def __init__(self, n_steps, lstm_hidden_size, dense_hidden_size, num_layers):
         super().__init__()
         embed_size = get_shape()[2]
+        num_outputs = get_shape()[2]
         self.pe = PositionalEncoding(n_steps, embed_size)
-        self.LSTM = nn.LSTM(embed_size, config.lstm_hidden_size,
-                            num_layers=config.num_layers, batch_first=True,
+        self.LSTM = nn.LSTM(embed_size, lstm_hidden_size,
+                            num_layers=num_layers, batch_first=True,
                             bidirectional=True)
         # 因为是双向 LSTM, 所以要乘2
-        self.ffn = nn.Linear(config.lstm_hidden_size * 2,
-                             config.dense_hidden_size)
+        self.ffn = nn.Linear(lstm_hidden_size * 2,
+                             dense_hidden_size)
         self.relu = nn.ReLU()
-        self.classifier = nn.Linear(config.dense_hidden_size,
-                                    config.num_outputs)
+        self.classifier = nn.Linear(dense_hidden_size, num_outputs)
 
     def forward(self, x, t):
         # shape: (batch_size, max_seq_length, embed_size)
@@ -494,123 +493,6 @@ class UNet1D(nn.Module):
         return x
 
 
-convnet_small_cfg = {
-    'type': 'ConvNet',
-    'intermediate_channels': [10, 20],
-    'pe_dim': 128
-}
-
-convnet_medium_cfg = {
-    'type': 'ConvNet',
-    'intermediate_channels': [10, 10, 20, 20, 40, 40, 80, 80],
-    'pe_dim': 256,
-    'insert_t_to_all_layers': True
-}
-convnet_big_cfg = {
-    'type': 'ConvNet',
-    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160],
-    'pe_dim': 256,
-    'insert_t_to_all_layers': True
-}
-
-unet_1_cfg = {'type': 'UNet', 'channels': [10, 20, 40, 80], 'pe_dim': 128}
-unet_res_cfg = {
-    'type': 'UNet',
-    'channels': [10, 20, 40, 80],
-    'pe_dim': 128,
-    'residual': True
-}
-
-convnet1d_big_cfg = {
-    'type': 'ConvNet1D',
-    'intermediate_channels': [20, 20, 40, 40, 80, 80, 160, 160, 40, 40, 10, 10, 1],
-    'pe_dim': 512,
-    'insert_t_to_all_layers': True
-}
-
-convnet1d_medium_cfg = {
-    'type': 'ConvNet1D',
-    'intermediate_channels': [20, 20, 40, 40, 80, 80, 40, 40, 10, 10, 1],
-    'pe_dim': 512,
-    'insert_t_to_all_layers': True
-}
-
-convnet1d_small_cfg = {
-    'type': 'ConvNet1D',
-    'intermediate_channels': [10, 20, 20, 10, 10, 1],
-    'pe_dim': 512,
-    'insert_t_to_all_layers': True
-}
-
-unet_res1d_cfg = {
-    'type': 'UNet1D',
-    'channels': [10, 20, 40, 80],
-    'pe_dim': 128,
-    'residual': True
-}
-unet_res1d_medium_cfg = {
-    'type': 'UNet1D',
-    'channels': [10, 20, 40, 80],
-    'pe_dim': 512,
-    'residual': True
-}
-unet_res1d_big_cfg = {
-    'type': 'UNet1D',
-    'channels': [10, 20, 40, 80, 160, 320],
-    'pe_dim': 128,
-    'residual': True
-}
-
-bi_lstm_cfg = {
-    'type': 'BiLSTM',
-    'config': bi_lstm.BI_LSTM_Config(128, 128, 1)
-}
-
-bi_lstm_medium_cfg = {
-    'type': 'BiLSTM',
-    'config': bi_lstm.BI_LSTM_Config(256, 256, 2)
-}
-
-bi_lstm_big_cfg = {
-    'type': 'BiLSTM',
-    'config': bi_lstm.BI_LSTM_Config(512, 512, 4)
-}
-convnet1d_big_classify_cfg = {
-    'type': 'ConvNet1DClassify',
-    'intermediate_channels': [20, 40, 80, 160, 160, 80, 40, 20],
-    'out_dim': 8,
-}
-
-convnet1d_medium_classify_cfg = {
-    'type': 'ConvNet1DClassify',
-    'intermediate_channels': [20, 40,  80, 40, 20],
-    'out_dim': 8,
-}
-
-convnet1d_small_classify_cfg = {
-    'type': 'ConvNet1DClassify',
-    'intermediate_channels': [10, 20, 10],
-    'out_dim': 8,
-}
-
-
-def build_network(config: dict, n_steps=None):
-    network_type = config.pop('type')
-    network_mapping = {
-        'ConvNet': ConvNet,
-        'UNet': UNet,
-        'ConvNet1D': ConvNet1D,
-        'UNet1D': UNet1D,
-        'BiLSTM': BiLSTM,
-        'ConvNet1DClassify': ConvNet1DClassify
-    }
-
-    network_cls = network_mapping.get(network_type)
-
-    network = network_cls(n_steps, **config) if n_steps is not None else network_cls(**config)
-    return network
-
-
 class DDPM:
 
     # n_steps 就是论文里的 T
@@ -684,3 +566,20 @@ class DDPM:
         x_t = mean + noise
 
         return x_t
+
+
+def build_network(config: dict, n_steps=None):
+    network_type = config.pop('type')
+    network_mapping = {
+        'ConvNet': ConvNet,
+        'UNet': UNet,
+        'ConvNet1D': ConvNet1D,
+        'UNet1D': UNet1D,
+        'BiLSTM': BiLSTM,
+        'ConvNet1DClassify': ConvNet1DClassify
+    }
+
+    network_cls = network_mapping.get(network_type)
+
+    network = network_cls(n_steps, **config) if n_steps is not None else network_cls(**config)
+    return network

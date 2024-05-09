@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
-from matplotlib import pyplot as plt
 from pandas import DataFrame
 from scipy.io import loadmat
 from torch import float32, tensor
@@ -137,8 +136,10 @@ class Signal:
 
 
 class Signals(Dataset):
-    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut', add_noise=False, windows_rate=0.5):
-        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type, add_noise, windows_rate) for f in os.listdir(path)
+    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut',
+                 add_noise=False, windows_rate=0.5):
+        self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type, add_noise, windows_rate) for f in
+                        os.listdir(path)
                         if
                         f.endswith('.mat')]
         self.labels = [signal.label for signal in self.signals]
@@ -164,13 +165,6 @@ class Signals(Dataset):
                 # 获取标签,并将标签转换为数字
                 label = eval(selected_column.index[j].split('_')[0])
                 target.append(label)
-
-        # 将data，target转换为numpy数组
-        # 对齐数据, 根据最短数据进行截取
-        # if self.slice_type != 'cut' and self.slice_type != 'window':
-        #     min_length = min([len(data[i][0]) for i in range(len(data))])
-        #     for i in range(len(data)):
-        #         data[i] = data[i][:, :min_length]
         data = np.array(data)
         target = np.array(target)
         return data, target

@@ -6,7 +6,7 @@ from model.ddim import DDIM
 from utils.dataset import make_noise
 
 
-class Reduce_noise(DDIM):
+class Signal_denoising(DDIM):
 
     def __init__(self,
                  device,
@@ -38,8 +38,7 @@ class Reduce_noise(DDIM):
         net = net.to(device)
 
         x = tensor(x).to(device)
-        for i in tqdm(range(1, ddim_step + 1),
-                      f'DDIM sampling with eta {eta} simple_var {simple_var}'):
+        for i in range(1, ddim_step + 1):
             cur_t = ts[i - 1] - 1
             prev_t = ts[i] - 1
             ab_cur = self.alpha_bars[cur_t]

@@ -11,14 +11,13 @@ from torch import tensor
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+
+from model.model_configs import configs
 from utils.early_stop import EarlyStopping
 
 from model.ddim import DDIM
-from model.ddpm import DDPM, build_network, convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, \
-    unet_res_cfg, convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg, unet_res1d_cfg, unet_res1d_medium_cfg, \
-    unet_res1d_big_cfg, bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg, convnet1d_big_classify_cfg, \
-    convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg
-from model.reduce_noise_ddim import Reduce_noise
+from model.ddpm import DDPM, build_network
+from model.signal_denoising_ddim import Signal_denoising
 from model.vit import VisionTransformer
 from utils.fft_plot import FFTPlot
 from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
@@ -203,7 +202,7 @@ def vit_train(dataset, config=None):
         "shape": (3, 256, 256),
         "num_classes": 8
     } if config is None else config
-    train_DDPM(config, dataset)
+    train_model(config, dataset)
 
 
 def plot_signal(signal, title, subplot_position):
@@ -214,8 +213,8 @@ def plot_signal(signal, title, subplot_position):
     plt.ylabel('amplitude')
 
 
-def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
-          path='./data', slice_length=512, log_dir='./run/00000000', n_epochs=500):
+def train_ddpm(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
+               path='./data', slice_length=512, log_dir='./run/00000000', n_epochs=500):
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
@@ -267,15 +266,6 @@ def train(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
         writer.add_scalar('epochs loss', total_loss, e)
         torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
     print('Done')
-
-
-configs = [
-    convnet_small_cfg, convnet_medium_cfg, convnet_big_cfg, unet_1_cfg, unet_res_cfg,  # 0-4, 图片处理
-    convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 5-7， 信号处理
-    unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 8-10， 信号处理
-    bi_lstm_cfg, bi_lstm_medium_cfg, bi_lstm_big_cfg,  # 11-13， 信号处理
-    convnet1d_big_classify_cfg, convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg,  # 14-16， 信号预测
-]
 
 
 def sample_imgs(ddpm, net, output_path, n_sample=81, device='cuda', simple_var=True):
@@ -336,7 +326,7 @@ def vit_predict(model_path, data, device='cuda'):
     return res
 
 
-def predict():
+def predict(device='cuda'):
     classify_model_path = './model/stft_512_vit_sample_best300_64batch.ckpt'
     stft_data = GeneralFigures('./work_dirs/stft', (3, 256, 256))
     stft_res = vit_predict(classify_model_path, stft_data.data, device=device)
@@ -360,34 +350,49 @@ def train_DDPM(device, model_name, data_path, config_id, log_dir, n_epochs=500):
     n_steps = 1000
     config = configs[config_id]
     net = build_network(config, n_steps)
-    rnddim = Reduce_noise(device, n_steps)
-    train(rnddim, net, device=device, ckpt_path=model_name, path=data_path, slice_length=512, log_dir=log_dir,
-          n_epochs=n_epochs)
+    sd_ddim = Signal_denoising(device, n_steps)
+    train_ddpm(sd_ddim, net, device=device, ckpt_path=model_name, path=data_path, slice_length=512, log_dir=log_dir,
+               n_epochs=n_epochs)
 
     net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))
-    sample_signals(rnddim, net, n_sample=10, device=device, input_path='./data')
+    sample_signals(sd_ddim, net, n_sample=10, device=device, input_path='./data')
 
 
-def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
-              n_epochs):  # 训练cnn1d分类模型
+def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
+              n_epochs, denoising_properties=None):  # 训练cnn1d分类模型
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
-    net = net.to(device).double()
+    net = denoising_net.to(device).double()
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adamax(net.parameters(), 1e-3, weight_decay=1e-5)
+    optimizer = torch.optim.Adamax(denoising_net.parameters(), 1e-3, weight_decay=1e-5)
     ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
     best_acc = 0
     train_acces = []
     train_losses = []
     test_acces = []
     test_losses = []
+    if denoising_properties is not None:  # 如果有去噪属性, 则加载去噪模型
+        n_steps = denoising_properties['n_steps']
+        device = denoising_properties['device']
+        config_id = denoising_properties['config_id']
+        log_dir = denoising_properties['root_dir']
+        model_name = denoising_properties['model_name']
+        config = configs[config_id]
+        denoising_net = build_network(config, n_steps)
+        sd_ddim = Signal_denoising(device, n_steps)
+        denoising_net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))  # 加载模型
+        denoising_net = denoising_net.to(device).eval()
     for e in range(n_epochs):
         train_acc = 0
         train_loss = 0
         test_acc = 0
         test_loss = 0
-        for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
+        for i, (x, y) in tqdm(enumerate(train_dataloader), desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device)
+            noisy_x = x[0].clone()
+            if denoising_properties is not None:
+                with torch.no_grad():
+                    x = sd_ddim.sample_backward(x.float(), denoising_net, device).double()  # 信号去噪
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
@@ -396,10 +401,17 @@ def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir
             optimizer.step()  # 更新参数
             train_acc += (logits.argmax(dim=-1) == y).float().mean()
             train_loss += loss.item()
+
+            fig, ax = plt.subplots(1, 2, figsize=(10, 10))
+            fig.tight_layout(h_pad=5, w_pad=5)
+
+            plot_signal(noisy_x, 'noisy_x', (1, 2, 1))
+            plot_signal(x, 'x', (1, 2, 2))
+            writer.add_figure('signal process', plt.gcf(), (i+1)*(e+1))
         for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):  # 测试
             x = x.to(device)
             y = y.to(device).long()
-            logits = net(x)
+            logits = denoising_net(x)
             loss = loss_fn(logits, y)
             test_acc += (logits.argmax(dim=-1) == y).float().mean()
             test_loss += loss.item()
@@ -410,44 +422,49 @@ def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir
         writer.add_scalars('acc', {'train': train_acces[-1], 'test': test_acces[-1]}, e)
         writer.add_scalars('loss', {'train': train_losses[-1], 'test': test_losses[-1]}, e)
         # 检测是否过拟合，如果过拟合则停止训练, Early Stop
-        ealy_stop(test_losses[-1], net)
+        ealy_stop(test_losses[-1], denoising_net)
         if ealy_stop.early_stop:
             print('Early stopping')
             break
         if test_acc > best_acc:
-            torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
+            torch.save(denoising_net.state_dict(), os.path.join(log_dir, ckpt_path))
             best_acc = test_acc
     print('Done')
 
 
-def train_classification(device, model_name, config_id, log_dir, train_dataloader=None,
-                         test_dataloader=None, n_epochs=500):
+def train_classification_step(device, model_name, config_id, log_dir, train_dataloader=None,
+                              test_dataloader=None, n_epochs=500, denoising_properties=None):
     config = configs[config_id]
     net = build_network(config)
     cnn_train(net, train_dataloader=train_dataloader, test_dataloader=test_dataloader, device=device,
-              ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs)
+              ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs, denoising_properties=denoising_properties)
 
 
-if __name__ == '__main__':
+def train_classification():
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda'
     data_path = './data'
     config_ids = [14, 15, 16]
-    model_name = ['classify_cnn1d_big_best300_512batch_origin.ckpt',
-                  'classify_cnn1d_medium_best300_512batch_origin.ckpt',
-                  'classify_cnn1d_small_best300_512batch_origin.ckpt']
-    log_dirs = ['./run/05081017', './run/05081117', './run/05081217']
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05)
+    model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_small_best300_512batch_denoising.ckpt']
+    log_dirs = ['./run/05091047', './run/05091147', './run/05091247']
+    denoising_properties = {
+        'n_steps': 1000,
+        'device': device,
+        'config_id': 11,
+        'root_dir': './model',
+        'model_name': 'reduce_noise_model_bi_lstm_small_change_output_huber_loss.pth',
+    }
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05, )
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
-    train_data = tensor(train_data)
-    test_data = tensor(test_data)
-    train_labels = tensor(train_labels)
-    test_labels = tensor(test_labels)
-    train_dataset = TensorDataset(train_data, train_labels)
-    test_dataset = TensorDataset(test_data, test_labels)
-    train_dataloader = DataLoader(train_dataset, batch_size=512, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=512, shuffle=False)
+    train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
+    test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
-        train_classification(device, model, config_id, log_dir, train_dataloader=train_dataloader,
-                             test_dataloader=test_dataloader, n_epochs=300)
+        train_classification_step(device, model, config_id, log_dir, train_dataloader=train_dataloader,
+                                  test_dataloader=test_dataloader, n_epochs=300,
+                                  denoising_properties=denoising_properties)
 
+
+if __name__ == '__main__':
+    train_classification()

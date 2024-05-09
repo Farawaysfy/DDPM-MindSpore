@@ -31,8 +31,7 @@ class DDIM(DDPM):
             x = torch.randn(img_or_shape).to(device)
         batch_size = x.shape[0]
         net = net.to(device)
-        for i in tqdm(range(1, ddim_step + 1),
-                      f'DDIM sampling with eta {eta} simple_var {simple_var}'):
+        for i in range(1, ddim_step + 1):
             cur_t = ts[i - 1] - 1
             prev_t = ts[i] - 1
 
