@@ -372,7 +372,7 @@ def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir
               n_epochs):  # 训练cnn1d分类模型
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
-    net = net.to(device).half()
+    net = net.to(device).double()
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adamax(net.parameters(), 1e-3, weight_decay=1e-5)
     ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
@@ -433,23 +433,6 @@ if __name__ == '__main__':
     device = 'cuda'
     data_path = './data'
     config_ids = [14, 15, 16]
-    model_name = ['classify_cnn1d_big_best300_512batch_noisy.ckpt',
-                  'classify_cnn1d_medium_best300_512batch_noisy.ckpt',
-                  'classify_cnn1d_small_best300_512batch_noisy.ckpt']
-    log_dirs = ['./run/05071617', './run/05071717', './run/05071817']
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=True, windows_rate=0.05)
-    train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
-    train_data = tensor(train_data)
-    test_data = tensor(test_data)
-    train_labels = tensor(train_labels)
-    test_labels = tensor(test_labels)
-    train_dataset = TensorDataset(train_data, train_labels)
-    test_dataset = TensorDataset(test_data, test_labels)
-    train_dataloader = DataLoader(train_dataset, batch_size=512, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=512, shuffle=False)
-    for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
-        train_classification(device, model, config_id, log_dir, train_dataloader=train_dataloader,
-                             test_dataloader=test_dataloader, n_epochs=300)
     model_name = ['classify_cnn1d_big_best300_512batch_origin.ckpt',
                   'classify_cnn1d_medium_best300_512batch_origin.ckpt',
                   'classify_cnn1d_small_best300_512batch_origin.ckpt']
@@ -465,10 +448,6 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(train_dataset, batch_size=512, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=512, shuffle=False)
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
-        train_classification(device, model, data_path, config_id, log_dir, train_dataloader=train_dataloader,
+        train_classification(device, model, config_id, log_dir, train_dataloader=train_dataloader,
                              test_dataloader=test_dataloader, n_epochs=300)
-    # sample_imgs(ddim, net, 'work_dirs/diffusion.png', n_sample=81, device=device)
-    # dataset = PictureData('./data', get_shape(),
-    #                       'stft', slice_length=512)
-    # dataset.showFigure(10)
-    # vit_train(dataset)
+
