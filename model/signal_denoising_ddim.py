@@ -18,7 +18,7 @@ class Signal_denoising(DDIM):
     def sample_forward(self, x, t, eps=None):
         alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
         if eps is None:
-            eps = make_noise(x)
+            eps = make_noise(x) + x
         res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
         return res
 

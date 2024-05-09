@@ -12,16 +12,14 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from model.model_configs import configs
-from utils.early_stop import EarlyStopping
-
-from model.ddim import DDIM
 from model.ddpm import DDPM, build_network
+from model.model_configs import configs
 from model.signal_denoising_ddim import Signal_denoising
 from model.vit import VisionTransformer
-from utils.fft_plot import FFTPlot
-from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
+from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, GeneralFigures, \
     tensor2img, make_noise, Signals
+from utils.early_stop import EarlyStopping
+from utils.fft_plot import FFTPlot
 
 batch_size = 512
 _exp_name = "sample"
@@ -213,38 +211,33 @@ def plot_signal(signal, title, subplot_position):
     plt.ylabel('amplitude')
 
 
-def train_ddpm(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
-               path='./data', slice_length=512, log_dir='./run/00000000', n_epochs=500):
+def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
+                    path='./data', slice_length=512, log_dir='./run/00000000', n_epochs=500):
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
-    # dataloader = get_dataloader(path, batch_size, slice_length)
-    dataloader = get_signal_dataloader(path, batch_size, slice_length)
+    dataloader = get_signal_dataloader(path, batch_size, slice_length, window_ratio=0.05)
     net = net.to(device).double()  # 将网络放到GPU上, 并且将网络的参数类型设置为double
-    loss_fn = nn.HuberLoss()
-    optimizer = torch.optim.Adamax(net.parameters(), 1e-3)
+    loss_fn = nn.MSELoss()  # 损失函数
+    optimizer = torch.optim.Adamax(net.parameters(), 1e-3, weight_decay=1e-5)
 
+    ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
     i = 0
     for e in range(n_epochs):
         total_loss = 0
 
-        for x, _ in tqdm(dataloader, desc='Epoch {}'.format(e)):
+        for x, y in tqdm(dataloader, desc='Epoch {}'.format(e)):
             current_batch_size = x.shape[0]
             x = x.to(device)  # Convert x to float32， x是纯净信号
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             # eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布  # 生成一个噪声
             # TODO
-            eps = make_noise(x).to(device).double()  # 根据x生成一个噪声
-            x_t = ddpm.sample_forward(x, t, eps)  # 生成一个x_t， x_t是x的一个前向样本, 相当于给原始输入加噪声
+            eps = make_noise(x).to(device).double()  # 根据x生成一个受干扰的信号,不包含x的信息,只有噪声的信息
+            x_t = ddpm.sample_forward(x, t, eps)  # 将eps噪声与纯净信号叠加, 生成一个新的噪声混合信号, 包含噪声\纯净信号及其耦合的信息
 
-            # x_t = x + eps  # 叠加噪声
-            x_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器, x_theta是去噪之后的信号
+            eps_theta = net(x_t + x, t.reshape(current_batch_size, 1))  # 去噪器, 其实是生成噪声, 生成的噪声是根据x_t+t生成的
 
-            # 将x_theta和x缩放到同一尺度
-            mx = max(torch.max(x_theta), -torch.min(x_theta))
-            x_mx = max(torch.max(x), -torch.min(x))
-            x = x / x_mx * mx
-            loss = loss_fn(x_theta, x)  # 计算x_theta和x的损失, 为什么要加1呢？因为x的范围是-1到1，加1之后变成0到2
+            loss = loss_fn(x, eps - eps_theta)  # 计算损失,使得eps-eps_theta尽可能的接近x
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -257,14 +250,18 @@ def train_ddpm(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth',
             plot_signal(x, 'x', (2, 2, 1))
             plot_signal(x_t, 'x_t', (2, 2, 2))
             plot_signal(eps, 'eps', (2, 2, 3))
-            plot_signal(x_theta, 'x_theta', (2, 2, 4))
+            plot_signal(eps_theta, 'x_theta', (2, 2, 4))
             writer.add_figure('signal process', plt.gcf(), i)
             writer.add_scalar('step loss', loss.item(), i)
             i += 1
 
-        total_loss /= len(dataloader.dataset)
+        total_loss /= len(dataloader)
         writer.add_scalar('epochs loss', total_loss, e)
         torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
+        ealy_stop(total_loss, net)
+        if ealy_stop.early_stop:
+            print('Early stopping')
+            break
     print('Done')
 
 
@@ -346,16 +343,14 @@ def predict(device='cuda'):
     print(f'预测结果：{same}个相同，占比{percent}')
 
 
-def train_DDPM(device, model_name, data_path, config_id, log_dir, n_epochs=500):
+def train_ddpm(device, model_name, data_path, config_id, log_dir, n_epochs=500):
     n_steps = 1000
     config = configs[config_id]
     net = build_network(config, n_steps)
     sd_ddim = Signal_denoising(device, n_steps)
-    train_ddpm(sd_ddim, net, device=device, ckpt_path=model_name, path=data_path, slice_length=512, log_dir=log_dir,
-               n_epochs=n_epochs)
-
-    net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))
-    sample_signals(sd_ddim, net, n_sample=10, device=device, input_path='./data')
+    train_ddpm_step(sd_ddim, net, device=device, ckpt_path=model_name, path=data_path, slice_length=256,
+                    log_dir=log_dir,
+                    n_epochs=n_epochs)
 
 
 def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
@@ -371,17 +366,6 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
     train_losses = []
     test_acces = []
     test_losses = []
-    if denoising_properties is not None:  # 如果有去噪属性, 则加载去噪模型
-        n_steps = denoising_properties['n_steps']
-        device = denoising_properties['device']
-        config_id = denoising_properties['config_id']
-        log_dir = denoising_properties['root_dir']
-        model_name = denoising_properties['model_name']
-        config = configs[config_id]
-        denoising_net = build_network(config, n_steps)
-        sd_ddim = Signal_denoising(device, n_steps)
-        denoising_net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))  # 加载模型
-        denoising_net = denoising_net.to(device).eval()
     for e in range(n_epochs):
         train_acc = 0
         train_loss = 0
@@ -389,10 +373,6 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
         test_loss = 0
         for i, (x, y) in tqdm(enumerate(train_dataloader), desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device)
-            noisy_x = x[0].clone()
-            if denoising_properties is not None:
-                with torch.no_grad():
-                    x = sd_ddim.sample_backward(x.float(), denoising_net, device).double()  # 信号去噪
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
@@ -401,17 +381,10 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
             optimizer.step()  # 更新参数
             train_acc += (logits.argmax(dim=-1) == y).float().mean()
             train_loss += loss.item()
-
-            fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-            fig.tight_layout(h_pad=5, w_pad=5)
-
-            plot_signal(noisy_x, 'noisy_x', (1, 2, 1))
-            plot_signal(x, 'x', (1, 2, 2))
-            writer.add_figure('signal process', plt.gcf(), (i+1)*(e+1))
         for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):  # 测试
             x = x.to(device)
             y = y.to(device).long()
-            logits = denoising_net(x)
+            logits = net(x)
             loss = loss_fn(logits, y)
             test_acc += (logits.argmax(dim=-1) == y).float().mean()
             test_loss += loss.item()
@@ -422,12 +395,12 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
         writer.add_scalars('acc', {'train': train_acces[-1], 'test': test_acces[-1]}, e)
         writer.add_scalars('loss', {'train': train_losses[-1], 'test': test_losses[-1]}, e)
         # 检测是否过拟合，如果过拟合则停止训练, Early Stop
-        ealy_stop(test_losses[-1], denoising_net)
+        ealy_stop(test_losses[-1], net)
         if ealy_stop.early_stop:
             print('Early stopping')
             break
         if test_acc > best_acc:
-            torch.save(denoising_net.state_dict(), os.path.join(log_dir, ckpt_path))
+            torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
             best_acc = test_acc
     print('Done')
 
@@ -466,5 +439,15 @@ def train_classification():
                                   denoising_properties=denoising_properties)
 
 
+def train_sd_ddim():
+    model_names = ['reduce_noise_model_bi_lstm_big_mse_loss.pth',
+                   'reduce_noise_model_bi_lstm_medium_mse_loss.pth',
+                   'reduce_noise_model_bi_lstm_small_mse_loss.pth']
+    log_dirs = ['./run/05091559', './run/05091659', './run/05091759']
+    config_ids = [11, 12, 13]
+    for model_name, config_id, log_dir in zip(model_names, config_ids, log_dirs):
+        train_ddpm('cuda', model_name, './data', config_id, log_dir, 200)
+
+
 if __name__ == '__main__':
-    train_classification()
+    train_sd_ddim()

@@ -38,11 +38,26 @@ class BiLSTM(nn.Module):
         self.LSTM = nn.LSTM(embed_size, lstm_hidden_size,
                             num_layers=num_layers, batch_first=True,
                             bidirectional=True)
-        # 因为是双向 LSTM, 所以要乘2
-        self.ffn = nn.Linear(lstm_hidden_size * 2,
-                             dense_hidden_size)
         self.relu = nn.ReLU()
-        self.classifier = nn.Linear(dense_hidden_size, num_outputs)
+        # 因为是双向 LSTM, 所以要乘2
+        self.classifier = nn.Sequential(
+            nn.Conv1d(dense_hidden_size * 2, dense_hidden_size, 1),
+            nn.Tanh(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(dense_hidden_size, dense_hidden_size//8, 1),
+            nn.Tanh(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(dense_hidden_size//8, 1, 1),
+            nn.Tanh(),
+            nn.MaxPool1d(2),
+        )
+        self.ffn = nn.Sequential(
+            nn.Linear(dense_hidden_size // 2, dense_hidden_size),
+            nn.Tanh(),
+            nn.Linear(dense_hidden_size, dense_hidden_size),
+            nn.Tanh(),
+            nn.Linear(dense_hidden_size, num_outputs)
+        )
 
     def forward(self, x, t):
         # shape: (batch_size, max_seq_length, embed_size)
@@ -52,11 +67,10 @@ class BiLSTM(nn.Module):
         lstm_hidden_states, _ = self.LSTM(x)
         # LSTM 的最后一个时刻的隐藏状态, 即句向量
         # shape: (batch, lstm_hidden_size * 2)
-        lstm_hidden_states = lstm_hidden_states[:, -1, :]
+        lstm_hidden_states = self.classifier(lstm_hidden_states.permute(0, 2, 1)).squeeze(1)
         # shape: (batch, dense_hidden_size)
-        ffn_outputs = self.relu(self.ffn(lstm_hidden_states))
         # shape: (batch, num_outputs)
-        logits = self.classifier(ffn_outputs)
+        logits = self.ffn(lstm_hidden_states)
 
         return logits.view(-1, get_shape()[1], get_shape()[2])
 

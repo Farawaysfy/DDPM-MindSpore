@@ -12,7 +12,7 @@ class DDIM1D(DDIM):
                  max_beta: float = 0.02):
         super().__init__(device, n_steps, min_beta, max_beta)
 
-    def sample_forward1D(self, x, t, eps=None):  # x是一维信号， eps是噪声, t是随机数，此步是加噪声
+    def sample_forward(self, x, t, eps=None):  # x是一维信号， eps是噪声, t是随机数，此步是加噪声
         alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
         if eps is None:
             eps = torch.randn_like(x)

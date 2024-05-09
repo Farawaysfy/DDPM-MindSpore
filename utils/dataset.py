@@ -273,14 +273,11 @@ def tensor2signal(tensor):  # 将tensor转换为numpy
     return tensor.numpy()[0]
 
 
-def generate_mixed_signal_data(signals: np.ndarray, frequency_range=(10, 1000),
-                               amplitude_range=(1, 10), snr_range=(-20, -5)):
+def generate_mixed_signal_data(signals: np.ndarray, snr):
     """
     生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
     :param signals: 原始信号数据集
-    :param frequency_range: 频率范围，以Hz为单位
-    :param amplitude_range: 幅值范围
-    :param snr_range: 信噪比范围，以dB为单位
+    :param snr: 信噪比
     :return: 原始信号和带噪声的信号
     """
     signals = np.zeros((10000, 512), dtype=np.float16) if signals is None else signals
@@ -293,9 +290,8 @@ def generate_mixed_signal_data(signals: np.ndarray, frequency_range=(10, 1000),
         # 计算信号功率
         signal_power = np.mean(signal ** 2)
 
-        # 随机选择信噪比
-        snr_db = np.random.uniform(*snr_range)
-        snr_linear = 10 ** (snr_db / 10)
+        # 给定信噪比，计算噪声功率
+        snr_linear = 10 ** (snr / 10)
         noise_power = signal_power / snr_linear
 
         # 生成噪声并添加到信号上
@@ -309,21 +305,22 @@ def generate_mixed_signal_data(signals: np.ndarray, frequency_range=(10, 1000),
 
 def get_dataloader(path, batch_size: int, slice_length=512) -> DataLoader:
     dataset = PictureData(path, get_shape(),
-                          'stft', slice_length=slice_length, merged=False)
+                          'stft', slice_length=slice_length)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
-def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='window', add_noise=False) -> DataLoader:
-    dataset = Signals(path, slice_length=slice_length, slice_type=slice_type, add_noise=add_noise)
+def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='window',
+                          add_noise=False, window_ratio=0.5) -> DataLoader:
+    dataset = Signals(path, slice_length=slice_length, slice_type=slice_type,
+                      add_noise=add_noise, windows_rate=window_ratio)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 
 def get_shape():  # 获取输入的形状
-    return 1, 1, 512
+    return 1, 1, 256
 
 
-def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_range=(1, 10),
-               snr_range=(-20, -5)):
+def make_noise(original_signal: tensor):
     """
     生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
     :param original_signal: 原始信号数据集
@@ -336,21 +333,12 @@ def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_ra
     noises = []
     for i in range(num_samples):
         cur_signal = original_signal[i][0].cpu().detach().numpy()
-        # cur_plot = FFTPlot(cur_signal, 'original', fs=5120)
-        # cur_plot.showOriginal()
-        # 计算信号功率
-        signal_power = np.mean(cur_signal ** 2)
-
-        # 随机选择信噪比
-        snr_db = np.random.uniform(*snr_range)
-        snr_linear = 10 ** (snr_db / 10)
-        noise_power = signal_power / snr_linear
-
-        # 生成噪声
-        temp = np.random.normal(0, np.sqrt(noise_power), cur_signal.shape).astype(np.float16)
-        # noise = FFTPlot(temp, 'noise', fs=5120)
-        # noise.showOriginal()
-        noises.append([temp])
+        # 使用label 生成位置编码信息,长度为sample_length
+        power = np.mean(cur_signal ** 2)
+        # 生成高斯白噪声, 均值为0, 方差为0-1之间的随机数,噪声的幅值是cur_signal的幅值的4-5倍
+        noise = (np.random.normal(0, np.random.uniform(0, 1), sample_length)
+                 * np.random.uniform(4, 5) * np.sqrt(power))
+        noises.append([noise])
 
     noises = np.array(noises)
     return tensor(noises, dtype=float32)
