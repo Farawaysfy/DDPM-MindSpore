@@ -371,7 +371,7 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
         train_loss = 0
         test_acc = 0
         test_loss = 0
-        for i, (x, y) in tqdm(enumerate(train_dataloader), desc='train Epoch {}'.format(e)):  # 训练
+        for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device)
             y = y.to(device).long()
             logits = net(x)
@@ -417,11 +417,6 @@ def train_classification():
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda'
     data_path = './data'
-    config_ids = [14, 15, 16]
-    model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
-                  'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
-                  'classify_cnn1d_small_best300_512batch_denoising.ckpt']
-    log_dirs = ['./run/05091047', './run/05091147', './run/05091247']
     denoising_properties = {
         'n_steps': 1000,
         'device': device,
@@ -429,10 +424,39 @@ def train_classification():
         'root_dir': './model',
         'model_name': 'reduce_noise_model_bi_lstm_small_change_output_huber_loss.pth',
     }
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05, )
+    n_steps = denoising_properties['n_steps']
+    device = denoising_properties['device']
+    config_id = denoising_properties['config_id']
+    log_dir = denoising_properties['root_dir']
+    model_name = denoising_properties['model_name']
+    config = configs[config_id]
+    denoising_net = build_network(config, n_steps)
+    sd_ddim = Signal_denoising(device, n_steps)
+    denoising_net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))  # 加载模型
+    denoising_net = denoising_net.to(device).eval()
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05)
+    interval = 256
+    pre, nx = 0, interval
+    for _ in tqdm(range(len(dataset.data)//interval), desc='denoising'):
+        cur = sd_ddim.sample_backward(tensor(dataset.data[pre:nx]).to(device).float(), denoising_net, device=device,
+                                      simple_var=True).detach().cpu().numpy()
+        dataset.data[pre:nx] = cur
+        pre = nx
+        nx += interval
+    if len(dataset.data) % interval != 0:
+        cur = sd_ddim.sample_backward(tensor(dataset.data[pre:nx]).to(device).float(), denoising_net, device=device,
+                                      simple_var=True).detach().cpu().numpy()
+        dataset.data[pre:] = cur
+    # 将处理后的数据保存
+    dataset.save('./data', 'denoising_data_small_bi_lstm_change_output_huber_loss')
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
+    config_ids = [14, 15, 16]
+    model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_small_best300_512batch_denoising.ckpt']
+    log_dirs = ['./run/05091047', './run/05091147', './run/05091247']
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
         train_classification_step(device, model, config_id, log_dir, train_dataloader=train_dataloader,
                                   test_dataloader=test_dataloader, n_epochs=300,
