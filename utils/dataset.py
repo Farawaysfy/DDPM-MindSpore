@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 from pandas import DataFrame
-from scipy.io import loadmat
+from scipy.io import loadmat, savemat
 from torch import float32, tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -183,6 +183,12 @@ class Signals(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.target[idx]
 
+    def save(self, path, file_name='signals'):
+        # 保存数据到mat文件
+        data = {'data': self.data.reshape(-1, get_shape()[-1]), 'target': self.target}
+        savePath = os.path.join(path, file_name + '.mat')
+        savemat(savePath, data)
+
 
 class PictureData(VisionDataset):
 
@@ -359,9 +365,9 @@ def make_noise(original_signal: tensor, frequency_range=(10, 1000), amplitude_ra
 if __name__ == '__main__':
     print('test')
     dataSet = Signals('../data', slice_length=512, slice_type='cut')
-
+    dataSet.save('../data')
     # noise, data = generate_mixed_signal_data(dataSet.data)
-    make_noise(dataSet.data)
+    # make_noise(dataSet.data)
 
     # noise_dataset = Signals('../data', slice_length=512, slice_type='cut', add_noise=True)
     # noise_fft = FFTPlot(noise_dataset.data[0][0], 'noisy', fs=5120)

@@ -12,16 +12,14 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from model.model_configs import configs
-from utils.early_stop import EarlyStopping
-
-from model.ddim import DDIM
 from model.ddpm import DDPM, build_network
+from model.model_configs import configs
 from model.signal_denoising_ddim import Signal_denoising
 from model.vit import VisionTransformer
-from utils.fft_plot import FFTPlot
-from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, PictureData, GeneralFigures, \
+from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, GeneralFigures, \
     tensor2img, make_noise, Signals
+from utils.early_stop import EarlyStopping
+from utils.fft_plot import FFTPlot
 
 batch_size = 512
 _exp_name = "sample"
@@ -371,28 +369,13 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
     train_losses = []
     test_acces = []
     test_losses = []
-    if denoising_properties is not None:  # 如果有去噪属性, 则加载去噪模型
-        n_steps = denoising_properties['n_steps']
-        device = denoising_properties['device']
-        config_id = denoising_properties['config_id']
-        log_dir = denoising_properties['root_dir']
-        model_name = denoising_properties['model_name']
-        config = configs[config_id]
-        denoising_net = build_network(config, n_steps)
-        sd_ddim = Signal_denoising(device, n_steps)
-        denoising_net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))  # 加载模型
-        denoising_net = denoising_net.to(device).eval()
     for e in range(n_epochs):
         train_acc = 0
         train_loss = 0
         test_acc = 0
         test_loss = 0
-        for i, (x, y) in tqdm(enumerate(train_dataloader), desc='train Epoch {}'.format(e)):  # 训练
+        for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device)
-            noisy_x = x[0].clone()
-            if denoising_properties is not None:
-                with torch.no_grad():
-                    x = sd_ddim.sample_backward(x.float(), denoising_net, device).double()  # 信号去噪
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
@@ -402,12 +385,6 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
             train_acc += (logits.argmax(dim=-1) == y).float().mean()
             train_loss += loss.item()
 
-            fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-            fig.tight_layout(h_pad=5, w_pad=5)
-
-            plot_signal(noisy_x, 'noisy_x', (1, 2, 1))
-            plot_signal(x, 'x', (1, 2, 2))
-            writer.add_figure('signal process', plt.gcf(), (i+1)*(e+1))
         for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):  # 测试
             x = x.to(device)
             y = y.to(device).long()
@@ -444,11 +421,6 @@ def train_classification():
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda'
     data_path = './data'
-    config_ids = [14, 15, 16]
-    model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
-                  'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
-                  'classify_cnn1d_small_best300_512batch_denoising.ckpt']
-    log_dirs = ['./run/05091047', './run/05091147', './run/05091247']
     denoising_properties = {
         'n_steps': 1000,
         'device': device,
@@ -456,10 +428,39 @@ def train_classification():
         'root_dir': './model',
         'model_name': 'reduce_noise_model_bi_lstm_small_change_output_huber_loss.pth',
     }
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05, )
+    n_steps = denoising_properties['n_steps']
+    device = denoising_properties['device']
+    config_id = denoising_properties['config_id']
+    log_dir = denoising_properties['root_dir']
+    model_name = denoising_properties['model_name']
+    config = configs[config_id]
+    denoising_net = build_network(config, n_steps)
+    sd_ddim = Signal_denoising(device, n_steps)
+    denoising_net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))  # 加载模型
+    denoising_net = denoising_net.to(device).eval()
+    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05)
+    interval = 256
+    pre, nx = 0, interval
+    for _ in tqdm(range(len(dataset.data)//interval), desc='denoising'):
+        cur = sd_ddim.sample_backward(tensor(dataset.data[pre:nx]).to(device).float(), denoising_net, device=device,
+                                      simple_var=True).detach().cpu().numpy()
+        dataset.data[pre:nx] = cur
+        pre = nx
+        nx += interval
+    if len(dataset.data) % interval != 0:
+        cur = sd_ddim.sample_backward(tensor(dataset.data[pre:nx]).to(device).float(), denoising_net, device=device,
+                                      simple_var=True).detach().cpu().numpy()
+        dataset.data[pre:] = cur
+    # 将处理后的数据保存
+    dataset.save('./data', 'denoising_data_small_bi_lstm_change_output_huber_loss')
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
+    config_ids = [14, 15, 16]
+    model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_small_best300_512batch_denoising.ckpt']
+    log_dirs = ['./run/05091047', './run/05091147', './run/05091247']
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
         train_classification_step(device, model, config_id, log_dir, train_dataloader=train_dataloader,
                                   test_dataloader=test_dataloader, n_epochs=300,
