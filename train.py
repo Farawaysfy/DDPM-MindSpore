@@ -3,6 +3,7 @@ import os
 import cv2
 import einops
 import numpy as np
+import scipy
 import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
@@ -22,7 +23,7 @@ from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, creat
 from utils.early_stop import EarlyStopping
 from utils.fft_plot import FFTPlot
 
-batch_size = 3200  # 最大化利用显存
+batch_size = 512  # 最大化利用显存
 _exp_name = "sample"
 
 
@@ -217,14 +218,14 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
-    dataloader = get_signal_dataloader(path, batch_size, slice_length, window_ratio=0.01)
+    dataloader = get_signal_dataloader(path, batch_size, slice_length, window_ratio=0.5)
     net = net.to(device)  # 将网络放到GPU上, 并且将网络的参数类型设置为double
-    loss_fn = CombinedLoss(0.4)  # 损失函数, 0.4是huber loss的权重, 0.6是fft loss的权重
+    loss_fn = CombinedLoss(0)  # 损失函数, 参数是huber loss的权重
     optimizer = torch.optim.AdamW(net.parameters(), lr=1e-3, weight_decay=1e-5)  # 优化器
 
     ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
     i = 0
-    best_loss = 'inf'  # 初始化最好的损失为无穷大
+    best_loss = np.inf  # 初始化最好的损失为无穷大
     for e in range(n_epochs):
         total_loss = 0
 
@@ -236,7 +237,6 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
             # TODO
             eps = make_noise(x, t).to(device)  # 生成一个噪声
             x_t = ddpm.sample_forward(x, t, eps)  # 将eps噪声与纯净信号叠加, 生成一个新的噪声混合信号, 包含噪声\纯净信号及其耦合的信息
-
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器, 其实是生成噪声, 生成的噪声是根据x_t+t生成的
 
             loss = loss_fn(eps, eps_theta)  # 计算损失,使得eps-eps_theta尽可能的接近x
@@ -469,13 +469,13 @@ def train_classification():
 
 
 def train_sd_ddim():
-    model_names = ['reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth',
-                   'reduce_noise_model_bi_lstm_medium_huber_loss_power_snr.pth',
-                   'reduce_noise_model_bi_lstm_small_huber_loss_power_snr.pth']
-    log_dirs = ['./run/05101300', './run/05101400', './run/05101500']
+    model_names = ['reduce_noise_model_bi_lstm_big_my_loss_power_snr.pth',
+                   'reduce_noise_model_bi_lstm_medium_my_loss_power_snr.pth',
+                   'reduce_noise_model_bi_lstm_small_my_loss_power_snr.pth']
+    log_dirs = ['./run/05101523', './run/05101623', './run/05101723']
     config_ids = [11, 12, 13]
     for model_name, config_id, log_dir in zip(model_names, config_ids, log_dirs):
-        train_ddpm('cuda', model_name, './data', config_id, log_dir, 200)
+        train_ddpm('cuda', model_name, './data', config_id, log_dir, 300)
 
 
 if __name__ == '__main__':

@@ -11,13 +11,15 @@ def compute_fft(signal):
 class FFTLoss(torch.nn.Module):
     def __init__(self):
         super(FFTLoss, self).__init__()
+        self.mse_loss = torch.nn.MSELoss()
 
     def forward(self, signal1, signal2):
         fft1, fft2 = compute_fft(signal1), compute_fft(signal2)
         # 计算FFT结果之间的损失
-        # 这里使用huber loss
-        loss = torch.nn.functional.huber_loss(fft1, fft2)
-        return loss
+        loss_real = self.mse_loss(fft1.real, fft2.real)
+        loss_imag = self.mse_loss(fft1.imag, fft2.imag)
+        # 这里使用mse loss
+        return (loss_real + loss_imag) / 2
 
 
 class CombinedLoss(torch.nn.Module):

@@ -5,13 +5,14 @@ import numpy as np
 import pandas as pd
 import torch
 from pandas import DataFrame
+from scipy.interpolate import make_interp_spline
 from scipy.io import loadmat, savemat
 from torch import float32, tensor
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision.datasets import VisionDataset
 from tqdm import tqdm
-
+from pykalman import KalmanFilter
 from utils.fft_plot import FFTPlot, processImg
 
 
@@ -326,11 +327,11 @@ def get_shape():  # 获取输入的形状
     return 1, 1, 512
 
 
-def make_noise(x: tensor, t: tensor):
+def make_noise(x: tensor, t: tensor) -> tensor:
     """
     生成高斯白噪声
     :param x:输入信号
-    :param snr:信噪比
+    :param t:当前步，用于计算信噪比
     :return:噪声的信号
     """
     x = x.detach().cpu().numpy()
@@ -348,12 +349,35 @@ def make_noise(x: tensor, t: tensor):
     return tensor(noises, dtype=float32)
 
 
+def process_signal(signal: tensor) -> tensor:
+    """
+    处理信号，使用卡尔曼滤波器
+    :param signal: 输入信号
+    :return: 处理后的信号
+    """
+    x = np.linspace(0, signal.shape[2] - 1, signal.shape[2])
+    signal = signal.flatten(1)
+    signal = signal.detach().cpu().numpy()
+    for i in range(len(signal)):
+        kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
+        kf = kf.em(signal[i], n_iter=10)
+        kf.transition_covariance = 0.01 * np.eye(kf.n_dim_state)
+        (smoothed_state_means, _) = kf.filter(signal[i])
+        smoothed_state_means = smoothed_state_means.flatten()
+        signal[i] = smoothed_state_means
+    return tensor(signal, dtype=float32).view(-1, 1, signal.shape[1])
+
+
 if __name__ == '__main__':
     print('test')
     dataSet = Signals('../data', slice_length=256, slice_type='cut')
     # noise, data = generate_mixed_signal_data(dataSet.data)
-    make_noise(tensor(dataSet.data), tensor([10] * len(dataSet.data)))
-
+    noisy_signal = make_noise(tensor(dataSet.data[0:64]), tensor([1000] * 64))
+    processed_signal = process_signal(noisy_signal)
+    noisy_fft = FFTPlot(noisy_signal[0][0], 'noisy', fs=5120)
+    noisy_fft.showOriginal()
+    processed_fft = FFTPlot(processed_signal[0][0], 'processed', fs=5120)
+    processed_fft.showOriginal()
     # noise_dataset = Signals('../data', slice_length=512, slice_type='cut', add_noise=True)
     # noise_fft = FFTPlot(noise_dataset.data[0][0], 'noisy', fs=5120)
     # noise_fft.showOriginal()
