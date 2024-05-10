@@ -9,26 +9,28 @@ def compute_fft(signal):
 
 
 class FFTLoss(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, isHuber=True):
         super(FFTLoss, self).__init__()
+        self.isHuber = isHuber
         self.mse_loss = torch.nn.MSELoss()
+        self.huber_loss = torch.nn.HuberLoss()
 
     def forward(self, signal1, signal2):
         fft1, fft2 = compute_fft(signal1), compute_fft(signal2)
         # 计算FFT结果之间的损失
-        loss_real = self.mse_loss(fft1.real, fft2.real)
-        loss_imag = self.mse_loss(fft1.imag, fft2.imag)
+        loss_real = self.huber_loss(fft1.real, fft2.real) if self.isHuber else self.mse_loss(fft1.real, fft2.real)
+        loss_imag = self.huber_loss(fft1.imag, fft2.imag) if self.isHuber else self.mse_loss(fft1.imag, fft2.imag)
         # 这里使用mse loss
         return (loss_real + loss_imag) / 2
 
 
 class CombinedLoss(torch.nn.Module):
-    def __init__(self, weight_huber=0.5):
+    def __init__(self, weight_huber=0.5, isHuber=True):
         super(CombinedLoss, self).__init__()
         self.weight_huber = weight_huber if 1 >= weight_huber >= 0 else 0.5
         # huber loss的权重
         self.huber_loss = torch.nn.HuberLoss()
-        self.fft_loss = FFTLoss()
+        self.fft_loss = FFTLoss(isHuber=isHuber)
 
     def forward(self, signal_output, signal_target):
         # 计算huber loss

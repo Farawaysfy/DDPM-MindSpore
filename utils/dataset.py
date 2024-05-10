@@ -13,6 +13,8 @@ from torch.utils.data import Dataset
 from torchvision.datasets import VisionDataset
 from tqdm import tqdm
 from pykalman import KalmanFilter
+
+from model.fft_loss import compute_fft
 from utils.fft_plot import FFTPlot, processImg
 
 
@@ -160,12 +162,9 @@ class Signals(Dataset):
             selected_column = self.df.loc[key]
             for j in range(len(selected_column)):
                 # 将selected_column[j]转换为(1, x)的形状
-                temp = selected_column[j].copy()
-                temp = temp.reshape(1, len(temp))
-                data.append(temp)
+                data.append(selected_column[j].reshape(1, -1))
                 # 获取标签,并将标签转换为数字
-                label = eval(selected_column.index[j].split('_')[0])
-                target.append(label)
+                target.append(eval(selected_column.index[j].split('_')[0]))
         data = np.array(data)
         target = np.array(target)
         return data, target
@@ -189,6 +188,33 @@ class Signals(Dataset):
         data = {'data': self.data.reshape(-1, get_shape()[-1]), 'target': self.target}
         savePath = os.path.join(path, file_name + '.mat')
         savemat(savePath, data)
+
+
+class Signal_fft(Signals):
+    def __init__(self, path, fs=5120, slice_length=512, slice_type='cut',
+                 add_noise=False, windows_rate=0.5):
+        super().__init__(path, fs, slice_length, slice_type, add_noise, windows_rate)
+        self.data, self.target = self.makeDataSets()
+
+    def makeDataSets(self):
+        dic = {
+            'TimeData/Motor/S_x': 0,
+            'TimeData/Motor/R_y': 1,
+            'TimeData/Motor/T_z': 2,
+        }
+        data = []
+        target = []
+        for key in dic:
+            selected_column = self.df.loc[key]
+            for j in range(len(selected_column)):
+                # 将selected_column[j]转换为(1, x)的形状
+                # Perform FFT, take absolute value, reshape and append to data
+                data.append(np.abs(np.fft.fft(selected_column[j])).reshape(1, -1))
+                # 获取标签,并将标签转换为数字
+                target.append(eval(selected_column.index[j].split('_')[0]))
+        data = np.array(data)
+        target = np.array(target)
+        return data, target
 
 
 class PictureData(VisionDataset):
@@ -337,7 +363,7 @@ def make_noise(x: tensor, t: tensor) -> tensor:
     x = x.detach().cpu().numpy()
     x = x.reshape(-1, len(x[0][0]))
     t = t.detach().cpu().numpy()
-    snr = 20 - np.power(t, 0.55)
+    snr = 30 - np.power(t, 0.55)  # 计算信噪比, 该公式应当根据实际情况调整
     noises = []
     snr_linears = 10 ** (snr / 10)
     for signal, snr_linear in zip(x, snr_linears):
@@ -372,7 +398,9 @@ if __name__ == '__main__':
     print('test')
     dataSet = Signals('../data', slice_length=256, slice_type='cut')
     # noise, data = generate_mixed_signal_data(dataSet.data)
-    noisy_signal = make_noise(tensor(dataSet.data[0:64]), tensor([1000] * 64))
+    noisy_signal = (make_noise(tensor(dataSet.data[0:64]), tensor([1000] * 64)).detach().cpu().numpy()
+                    + dataSet.data[0:64])
+
     processed_signal = process_signal(noisy_signal)
     noisy_fft = FFTPlot(noisy_signal[0][0], 'noisy', fs=5120)
     noisy_fft.showOriginal()

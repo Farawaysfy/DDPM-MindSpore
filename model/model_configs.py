@@ -67,23 +67,23 @@ unet_res1d_big_cfg = {
 
 bi_lstm_small_cfg = {
     'type': 'BiLSTM',
-    'lstm_hidden_size': 64,
-    'pe_dim': 64,
-    'num_layers': 1,
+    'lstm_hidden_size': 32,  # lstm隐藏层大小
+    'pe_dim': 128,
+    'num_layers': 128,
 }
 
 bi_lstm_medium_cfg = {
     'type': 'BiLSTM',
-    'lstm_hidden_size': 64,
-    'pe_dim': 64,
-    'num_layers': 2,
+    'lstm_hidden_size': 32,
+    'pe_dim': 128,
+    'num_layers': 256,
 }
 
 bi_lstm_big_cfg = {
     'type': 'BiLSTM',
-    'lstm_hidden_size': 128,
+    'lstm_hidden_size': 32,
     'pe_dim': 128,
-    'num_layers': 2,
+    'num_layers': 512,
 }
 convnet1d_big_classify_cfg = {
     'type': 'ConvNet1DClassify',

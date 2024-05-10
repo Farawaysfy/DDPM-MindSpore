@@ -3,7 +3,6 @@ import os
 import cv2
 import einops
 import numpy as np
-import scipy
 import torch
 import torch.nn as nn
 from matplotlib import pyplot as plt
@@ -23,7 +22,7 @@ from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, creat
 from utils.early_stop import EarlyStopping
 from utils.fft_plot import FFTPlot
 
-batch_size = 512  # 最大化利用显存
+batch_size = 32  # 最大化利用显存
 _exp_name = "sample"
 
 
@@ -218,10 +217,10 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     n_steps = ddpm.n_steps
-    dataloader = get_signal_dataloader(path, batch_size, slice_length, window_ratio=0.5)
+    dataloader = get_signal_dataloader(path, batch_size, slice_length, slice_type='cut')
     net = net.to(device)  # 将网络放到GPU上, 并且将网络的参数类型设置为double
-    loss_fn = CombinedLoss(0)  # 损失函数, 参数是huber loss的权重
-    optimizer = torch.optim.AdamW(net.parameters(), lr=1e-3, weight_decay=1e-5)  # 优化器
+    loss_fn = CombinedLoss(0.3)  # 损失函数, 参数是huber loss的权重
+    optimizer = torch.optim.AdamW(net.parameters(), lr=1e-2, weight_decay=1e-4)  # 优化器
 
     ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
     i = 0
@@ -243,7 +242,7 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            total_loss += loss.item() * current_batch_size
+            total_loss += loss.item()
 
             # 信号diffusion的过程
             fig, ax = plt.subplots(2, 2, figsize=(10, 10))
