@@ -18,8 +18,8 @@ class Signal_denoising(DDIM):
     def sample_forward(self, x, t, eps=None):
         alpha_bar = self.alpha_bars[t].reshape(-1, 1, 1)
         if eps is None:
-            eps = make_noise(x) + x
-        res = eps * torch.sqrt(1 - alpha_bar) + torch.sqrt(alpha_bar) * x
+            eps = make_noise(x, t)  # 生成噪声
+        res = eps * torch.sqrt(1 - alpha_bar) + x * torch.sqrt(alpha_bar)
         return res
 
     def sample_backward(self,
@@ -45,9 +45,9 @@ class Signal_denoising(DDIM):
             ab_prev = self.alpha_bars[prev_t] if prev_t >= 0 else 1
             t_tensor = torch.tensor([cur_t] * batch_size,
                                     dtype=torch.long).to(device).unsqueeze(1)
-            eps = net(x, t_tensor)
+            eps = net(x, t_tensor)  # 生成噪声
             var = eta * (1 - ab_prev) / (1 - ab_cur) * (1 - ab_cur / ab_prev)
-            noise = make_noise(x).to(device)
+            noise = make_noise(x, cur_t).to(device)
             first_term = (ab_prev / ab_cur) ** 0.5 * x
             second_term = ((1 - ab_prev - var) ** 0.5 -
                            (ab_prev * (1 - ab_cur) / ab_cur) ** 0.5) * eps

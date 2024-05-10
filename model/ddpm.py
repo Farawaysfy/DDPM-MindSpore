@@ -30,46 +30,61 @@ class PositionalEncoding(nn.Module):
 
 
 class BiLSTM(nn.Module):
-    def __init__(self, n_steps, lstm_hidden_size, dense_hidden_size, num_layers):
+    def __init__(self, n_steps, lstm_hidden_size, pe_dim, num_layers):
         super().__init__()
-        embed_size = get_shape()[2]
-        num_outputs = get_shape()[2]
-        self.pe = PositionalEncoding(n_steps, embed_size)
-        self.LSTM = nn.LSTM(embed_size, lstm_hidden_size,
+        num_outputs = get_shape()[2]  # 输入和输出的长度相同
+        self.pe = PositionalEncoding(n_steps, pe_dim)
+        self.LSTM = nn.LSTM(num_outputs, lstm_hidden_size,
                             num_layers=num_layers, batch_first=True,
                             bidirectional=True)
         self.relu = nn.ReLU()
         # 因为是双向 LSTM, 所以要乘2
-        self.classifier = nn.Sequential(
-            nn.Conv1d(dense_hidden_size * 2, dense_hidden_size, 1),
-            nn.Tanh(),
-            nn.MaxPool1d(2),
-            nn.Conv1d(dense_hidden_size, dense_hidden_size//8, 1),
-            nn.Tanh(),
-            nn.MaxPool1d(2),
-            nn.Conv1d(dense_hidden_size//8, 1, 1),
-            nn.Tanh(),
-            nn.MaxPool1d(2),
-        )
+        self.classifier = nn.ModuleList()
+        input_channel = pe_dim
+        output_channel = pe_dim // 2
+        mlp_input_size = lstm_hidden_size * 2 * pe_dim
+        for _ in range(num_layers):
+            self.classifier.append(
+                nn.Sequential(
+                    nn.Conv1d(input_channel, output_channel, 3, 1, 1),
+                    nn.ReLU(),
+                    nn.BatchNorm1d(output_channel),
+                    nn.MaxPool1d(2)
+                )
+            )  # 每次卷积后，长度减半, 通道数减半
+            input_channel = output_channel
+            output_channel = output_channel // 2
+        output_channel = input_channel * 2
+        for _ in range(num_layers):
+            self.classifier.append(
+                nn.Sequential(
+                    nn.Conv1d(input_channel, output_channel, 3, 1, 1),
+                    nn.ReLU(),
+                    nn.BatchNorm1d(output_channel),
+                )
+            )  # 每次卷积后，长度不变, 通道数翻倍
+            input_channel = output_channel
+            output_channel = output_channel * 2
+        mlp_input_size = mlp_input_size // 2**num_layers
         self.ffn = nn.Sequential(
-            nn.Linear(dense_hidden_size // 2, dense_hidden_size),
-            nn.Tanh(),
-            nn.Linear(dense_hidden_size, dense_hidden_size),
-            nn.Tanh(),
-            nn.Linear(dense_hidden_size, num_outputs)
+            nn.Linear(mlp_input_size, mlp_input_size // 4),
+            nn.ReLU(),
+            nn.Linear(mlp_input_size // 4, mlp_input_size // 16),
+            nn.ReLU(),
+            nn.Linear(mlp_input_size // 16, num_outputs)
         )
 
     def forward(self, x, t):
-        # shape: (batch_size, max_seq_length, embed_size)
-        pe = self.pe(t).reshape(t.shape[0], -1, 1)
-        x = x + pe
-        # shape: (batch_size, max_seq_length, lstm_hidden_size * 2)
-        lstm_hidden_states, _ = self.LSTM(x)
+
+        pe = self.pe(t).reshape(t.shape[0], -1, 1)  # 位置编码
+        x = x + pe  # shape: (batch_size, pe_dim, num_outputs)
+
+        lstm_hidden_states, _ = self.LSTM(x)  # shape: (batch_size, pe_dim, lstm_hidden_size * 2)
         # LSTM 的最后一个时刻的隐藏状态, 即句向量
-        # shape: (batch, lstm_hidden_size * 2)
-        lstm_hidden_states = self.classifier(lstm_hidden_states.permute(0, 2, 1)).squeeze(1)
-        # shape: (batch, dense_hidden_size)
-        # shape: (batch, num_outputs)
+        for m_x in self.classifier:
+            lstm_hidden_states = m_x(lstm_hidden_states)
+        lstm_hidden_states = lstm_hidden_states.flatten(1)
+        # shape: (batch, lstm_hidden_size * 2 * num_outputs // 2**num_layers)
         logits = self.ffn(lstm_hidden_states)
 
         return logits.view(-1, get_shape()[1], get_shape()[2])
@@ -573,9 +588,6 @@ class DDPM:
             mean = (x_t -
                     (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) *
                     eps) / torch.sqrt(self.alphas[t])
-        mean = (x_t -
-                (1 - self.alphas[t]) / torch.sqrt(1 - self.alpha_bars[t]) *
-                eps) / torch.sqrt(self.alphas[t])
 
         x_t = mean + noise
 

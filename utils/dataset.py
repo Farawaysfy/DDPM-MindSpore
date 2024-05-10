@@ -323,39 +323,36 @@ def get_signal_dataloader(path, batch_size: int, slice_length=512, slice_type='w
 
 
 def get_shape():  # 获取输入的形状
-    return 1, 1, 256
+    return 1, 1, 512
 
 
-def make_noise(original_signal: tensor):
+def make_noise(x: tensor, t: tensor):
     """
-    生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
-    :param original_signal: 原始信号数据集
-    :param frequency_range: 频率范围，以Hz为单位
-    :param amplitude_range: 幅值范围
-    :param snr_range: 信噪比范围，以dB为单位
-    :return: 原始信号和带噪声的信号
+    生成高斯白噪声
+    :param x:输入信号
+    :param snr:信噪比
+    :return:噪声的信号
     """
-    num_samples, sample_length = original_signal.shape[0], original_signal.shape[2]
+    x = x.detach().cpu().numpy()
+    x = x.reshape(-1, len(x[0][0]))
+    t = t.detach().cpu().numpy()
+    snr = 20 - np.power(t, 0.55)
     noises = []
-    for i in range(num_samples):
-        cur_signal = original_signal[i][0].cpu().detach().numpy()
-        # 使用label 生成位置编码信息,长度为sample_length
-        power = np.mean(cur_signal ** 2)
-        # 生成高斯白噪声, 均值为0, 方差为0-1之间的随机数,噪声的幅值是cur_signal的幅值的4-5倍
-        noise = (np.random.normal(0, np.random.uniform(0, 1), sample_length)
-                 * np.random.uniform(4, 5) * np.sqrt(power))
-        noises.append([noise])
-
+    snr_linears = 10 ** (snr / 10)
+    for signal, snr_linear in zip(x, snr_linears):
+        signal_power = np.mean(signal ** 2)
+        noise_power = signal_power / snr_linear
+        noises.append(np.random.randn(len(signal)) * np.sqrt(noise_power))
     noises = np.array(noises)
+    noises = noises.reshape(-1, 1, len(noises[0]))
     return tensor(noises, dtype=float32)
 
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data', slice_length=512, slice_type='cut')
-    dataSet.save('../data')
+    dataSet = Signals('../data', slice_length=256, slice_type='cut')
     # noise, data = generate_mixed_signal_data(dataSet.data)
-    # make_noise(dataSet.data)
+    make_noise(tensor(dataSet.data), tensor([10] * len(dataSet.data)))
 
     # noise_dataset = Signals('../data', slice_length=512, slice_type='cut', add_noise=True)
     # noise_fft = FFTPlot(noise_dataset.data[0][0], 'noisy', fs=5120)
