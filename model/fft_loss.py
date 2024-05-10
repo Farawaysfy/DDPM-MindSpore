@@ -21,9 +21,10 @@ class FFTLoss(torch.nn.Module):
 
 
 class CombinedLoss(torch.nn.Module):
-    def __init__(self, weight_huber=1.0):
+    def __init__(self, weight_huber=0.5):
         super(CombinedLoss, self).__init__()
-        self.weight_huber = weight_huber
+        self.weight_huber = weight_huber if 1 >= weight_huber >= 0 else 0.5
+        # huber loss的权重
         self.huber_loss = torch.nn.HuberLoss()
         self.fft_loss = FFTLoss()
 

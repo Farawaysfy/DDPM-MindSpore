@@ -13,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from model.ddpm import DDPM, build_network
+from model.fft_loss import CombinedLoss
 from model.model_configs import configs
 from model.signal_denoising_ddim import Signal_denoising
 from model.vit import VisionTransformer
@@ -218,11 +219,12 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
     n_steps = ddpm.n_steps
     dataloader = get_signal_dataloader(path, batch_size, slice_length, window_ratio=0.01)
     net = net.to(device)  # 将网络放到GPU上, 并且将网络的参数类型设置为double
-    loss_fn = nn.HuberLoss()  # 损失函数
+    loss_fn = CombinedLoss(0.4)  # 损失函数, 0.4是huber loss的权重, 0.6是fft loss的权重
     optimizer = torch.optim.AdamW(net.parameters(), lr=1e-3, weight_decay=1e-5)  # 优化器
 
     ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
     i = 0
+    best_loss = 'inf'  # 初始化最好的损失为无穷大
     for e in range(n_epochs):
         total_loss = 0
 
@@ -256,8 +258,11 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
             i += 1
 
         total_loss /= len(dataloader)
+
         writer.add_scalar('epochs loss', total_loss, e)
-        torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
+        if total_loss < best_loss:
+            best_loss = total_loss
+            torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
         ealy_stop(total_loss, net)
         if ealy_stop.early_stop:
             print('Early stopping')
