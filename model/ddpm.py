@@ -43,7 +43,7 @@ class BiLSTM(nn.Module):
         input_channel = pe_dim
         output_channel = pe_dim // 2
         mlp_input_size = lstm_hidden_size * 2 * pe_dim
-        for _ in range(num_layers):
+        for _ in range(num_layers if num_layers <= 8 else 8):
             self.classifier.append(
                 nn.Sequential(
                     nn.Conv1d(input_channel, output_channel, 3, 1, 1),
@@ -52,10 +52,15 @@ class BiLSTM(nn.Module):
                     nn.MaxPool1d(2)
                 )
             )  # 每次卷积后，长度减半, 通道数减半
+            if output_channel == 4:
+                mlp_input_size = mlp_input_size // 4
+                input_channel = output_channel
+                break
             input_channel = output_channel
             output_channel = output_channel // 2
+            mlp_input_size = mlp_input_size // 4
         output_channel = input_channel * 2
-        for _ in range(num_layers):
+        for _ in range(num_layers if num_layers <= 8 else 8):
             self.classifier.append(
                 nn.Sequential(
                     nn.Conv1d(input_channel, output_channel, 3, 1, 1),
@@ -65,7 +70,7 @@ class BiLSTM(nn.Module):
             )  # 每次卷积后，长度不变, 通道数翻倍
             input_channel = output_channel
             output_channel = output_channel * 2
-        mlp_input_size = mlp_input_size // 2**num_layers
+            mlp_input_size = mlp_input_size * 2
         self.ffn = nn.Sequential(
             nn.Linear(mlp_input_size, mlp_input_size // 4),
             nn.ReLU(),
@@ -186,13 +191,15 @@ class ConvNet1D(nn.Module):
 class ConvNet1DClassify(nn.Module):
 
     def __init__(self,
-                 intermediate_channels=[10, 20, 40],
+                 intermediate_channels=None,
                  out_dim=10):
         super().__init__()
+        if intermediate_channels is None:
+            intermediate_channels = [10, 20, 40]
         C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
 
         self.cnn1d_blocks = nn.ModuleList()
-        prev_channel = C
+        prev_channel = H
         for channel in intermediate_channels:
             self.cnn1d_blocks.append(nn.Sequential(
                 nn.Conv1d(prev_channel, channel, 3, 1, 1),

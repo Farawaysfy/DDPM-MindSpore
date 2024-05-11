@@ -67,23 +67,23 @@ unet_res1d_big_cfg = {
 
 bi_lstm_small_cfg = {
     'type': 'BiLSTM',
-    'lstm_hidden_size': 64,
-    'pe_dim': 64,
-    'num_layers': 1,
+    'lstm_hidden_size': 32,  # lstm隐藏层大小
+    'pe_dim': 128,
+    'num_layers': 4,
 }
 
 bi_lstm_medium_cfg = {
     'type': 'BiLSTM',
-    'lstm_hidden_size': 64,
-    'pe_dim': 64,
-    'num_layers': 2,
+    'lstm_hidden_size': 32,
+    'pe_dim': 128,
+    'num_layers': 8,
 }
 
 bi_lstm_big_cfg = {
     'type': 'BiLSTM',
-    'lstm_hidden_size': 128,
+    'lstm_hidden_size': 32,
     'pe_dim': 128,
-    'num_layers': 2,
+    'num_layers': 16,
 }
 convnet1d_big_classify_cfg = {
     'type': 'ConvNet1DClassify',
@@ -103,11 +103,10 @@ convnet1d_small_classify_cfg = {
     'out_dim': 8,
 }
 
-bi_lstm_configs = {
-    'lstm_hidden_size': 128,
-    'dense_hidden_size': 128,
-    'num_layers': 1,
-    'num_outputs': 8,
+convnet1d_mini_classify_cfg = {
+    'type': 'ConvNet1DClassify',
+    'intermediate_channels': [10],
+    'out_dim': 8,
 }
 
 configs = [
@@ -115,6 +114,6 @@ configs = [
     convnet1d_big_cfg, convnet1d_medium_cfg, convnet1d_small_cfg,  # 5-7， 信号处理
     unet_res1d_cfg, unet_res1d_medium_cfg, unet_res1d_big_cfg,  # 8-10， 信号处理
     bi_lstm_big_cfg, bi_lstm_medium_cfg, bi_lstm_small_cfg,  # 11-13， 信号处理
-    convnet1d_big_classify_cfg, convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg,  # 14-16， 信号预测
+    convnet1d_big_classify_cfg, convnet1d_medium_classify_cfg, convnet1d_small_classify_cfg,
+    convnet1d_mini_classify_cfg  # 14-17， 信号预测
 ]
-
