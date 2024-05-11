@@ -191,13 +191,15 @@ class ConvNet1D(nn.Module):
 class ConvNet1DClassify(nn.Module):
 
     def __init__(self,
-                 intermediate_channels=[10, 20, 40],
+                 intermediate_channels=None,
                  out_dim=10):
         super().__init__()
+        if intermediate_channels is None:
+            intermediate_channels = [10, 20, 40]
         C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
 
         self.cnn1d_blocks = nn.ModuleList()
-        prev_channel = C
+        prev_channel = H
         for channel in intermediate_channels:
             self.cnn1d_blocks.append(nn.Sequential(
                 nn.Conv1d(prev_channel, channel, 3, 1, 1),

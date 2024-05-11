@@ -68,5 +68,6 @@ class Signal_denoising(DDIM):
 
             # 保持x的均值为0左右
             x = x - torch.mean(x)
+            x = x / torch.max(torch.abs(x))  # 归一化
 
         return x

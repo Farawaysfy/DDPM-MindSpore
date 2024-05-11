@@ -357,14 +357,14 @@ def train_ddpm(device, model_name, data_path, config_id, log_dir, n_epochs=500):
                     n_epochs=n_epochs)
 
 
-def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
+def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
               n_epochs):  # 训练cnn1d分类模型
     createFolder(log_dir)
     writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
-    net = denoising_net.to(device).double()
+    net = net.to(device).float()
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adamax(denoising_net.parameters(), 1e-3, weight_decay=1e-5)
-    ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
+    optimizer = torch.optim.Adamax(net.parameters(), 1e-3, weight_decay=1e-5)
+    ealy_stop = EarlyStopping(log_dir, patience=30, verbose=True)
     best_acc = 0
     train_acces = []
     train_losses = []
@@ -376,7 +376,7 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
         test_acc = 0
         test_loss = 0
         for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
-            x = x.to(device)
+            x = x.to(device).float()
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
@@ -386,7 +386,7 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
             train_acc += (logits.argmax(dim=-1) == y).float().mean()
             train_loss += loss.item()
         for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):  # 测试
-            x = x.to(device)
+            x = x.to(device).float()
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
@@ -438,8 +438,8 @@ def train_classification():
     sd_ddim = Signal_denoising(device, n_steps)
     denoising_net.load_state_dict(torch.load(os.path.join(log_dir, model_name)))  # 加载模型
     denoising_net = denoising_net.to(device).eval()
-    dataset = Signals(data_path, slice_length=512, slice_type='window', add_noise=False, windows_rate=0.05)
-    interval = 256
+    dataset = Signals(data_path, slice_length=512, slice_type='cut', add_noise=True)
+    interval = 256  # 一次处理的数据量
     pre, nx = 0, interval
     for _ in tqdm(range(len(dataset.data) // interval), desc='denoising'):
         cur = sd_ddim.sample_backward(tensor(dataset.data[pre:nx]).to(device).float(), denoising_net, device=device,
@@ -452,18 +452,19 @@ def train_classification():
                                       simple_var=True).detach().cpu().numpy()
         dataset.data[pre:] = cur
     # 将处理后的数据保存
-    dataset.save(log_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth05101523')
+    dataset.save(log_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr05101523')
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
-    config_ids = [14, 15, 16]
-    model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
+    config_ids = [17, 16, 15, 14]
+    model_name = ['classify_cnn1d_mini_best300_512batch_denoising.ckpt',
+                  'classify_cnn1d_small_best300_512batch_denoising.ckpt',
                   'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
-                  'classify_cnn1d_small_best300_512batch_denoising.ckpt']
-    log_dirs = ['./run/05111522', './run/05111622', './run/05111722']
+                  'classify_cnn1d_big_best300_512batch_denoising.ckpt']
+    log_dirs = ['./run/05120100', './run/05112200', './run/05112300', './run/05120000',]
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
         train_classification_step(device, model, config_id, log_dir, train_dataloader=train_dataloader,
-                                  test_dataloader=test_dataloader, n_epochs=300)
+                                  test_dataloader=test_dataloader, n_epochs=1000)
 
 
 def train_sd_ddim():
