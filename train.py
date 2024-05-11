@@ -420,7 +420,7 @@ def train_classification_step(device, model_name, config_id, log_dir, train_data
 
 def train_classification():
     os.makedirs('work_dirs', exist_ok=True)
-    device = 'cuda'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     data_path = './data'
     denoising_properties = {
         'n_steps': 1000,
@@ -474,8 +474,10 @@ def train_sd_ddim():
                    'reduce_noise_model_bi_lstm_small_my_loss_power_snr.pth']
     log_dirs = ['./run/05101523', './run/05101623', './run/05101723']
     config_ids = [11, 12, 13]
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     for model_name, config_id, log_dir in zip(model_names, config_ids, log_dirs):
-        train_ddpm('cuda', model_name, './data', config_id, log_dir, 300)
+        train_ddpm(device, model_name, './data', config_id, log_dir, 300)
 
 
 if __name__ == '__main__':
