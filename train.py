@@ -22,7 +22,7 @@ from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, creat
 from utils.early_stop import EarlyStopping
 from utils.fft_plot import FFTPlot
 
-batch_size = 32  # 最大化利用显存
+batch_size = 2048  # 最大化利用显存
 _exp_name = "sample"
 
 
@@ -219,7 +219,7 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
     n_steps = ddpm.n_steps
     dataloader = get_signal_dataloader(path, batch_size, slice_length, slice_type='cut')
     net = net.to(device)  # 将网络放到GPU上, 并且将网络的参数类型设置为double
-    loss_fn = CombinedLoss(0.3)  # 损失函数, 参数是huber loss的权重
+    loss_fn = nn.HuberLoss()  # 损失函数, 参数是huber loss的权重
     optimizer = torch.optim.AdamW(net.parameters(), lr=1e-2, weight_decay=1e-4)  # 优化器
 
     ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
@@ -234,7 +234,7 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
             t = torch.randint(0, n_steps, (current_batch_size,)).to(device)  # 生成一个0到n_steps之间的随机数
             # eps = torch.randn_like(x).to(device)  # 作用是生成一个与x同样shape的随机数，服从标准正态分布  # 生成一个噪声
             # TODO
-            eps = make_noise(x, t).to(device)  # 生成一个噪声
+            eps = make_noise(t).to(device)  # 生成一个噪声, 此处的x是纯净信号, t是一个随机数
             x_t = ddpm.sample_forward(x, t, eps)  # 将eps噪声与纯净信号叠加, 生成一个新的噪声混合信号, 包含噪声\纯净信号及其耦合的信息
             eps_theta = net(x_t, t.reshape(current_batch_size, 1))  # 去噪器, 其实是生成噪声, 生成的噪声是根据x_t+t生成的
 
@@ -410,11 +410,11 @@ def cnn_train(denoising_net, train_dataloader, test_dataloader, device, ckpt_pat
 
 
 def train_classification_step(device, model_name, config_id, log_dir, train_dataloader=None,
-                              test_dataloader=None, n_epochs=500, denoising_properties=None):
+                              test_dataloader=None, n_epochs=500):
     config = configs[config_id]
     net = build_network(config)
     cnn_train(net, train_dataloader=train_dataloader, test_dataloader=test_dataloader, device=device,
-              ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs, denoising_properties=denoising_properties)
+              ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs)
 
 
 def train_classification():
@@ -422,11 +422,11 @@ def train_classification():
     device = 'cuda'
     data_path = './data'
     denoising_properties = {
-        'n_steps': 1000,
+        'n_steps': 2000,
         'device': device,
         'config_id': 11,
-        'root_dir': './model',
-        'model_name': 'reduce_noise_model_bi_lstm_small_change_output_huber_loss.pth',
+        'root_dir': './run/05101523',
+        'model_name': 'best_network.pth',
     }
     n_steps = denoising_properties['n_steps']
     device = denoising_properties['device']
@@ -452,7 +452,7 @@ def train_classification():
                                       simple_var=True).detach().cpu().numpy()
         dataset.data[pre:] = cur
     # 将处理后的数据保存
-    dataset.save('./data', 'denoising_data_small_bi_lstm_change_output_huber_loss')
+    dataset.save(log_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth05101523')
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
@@ -460,17 +460,16 @@ def train_classification():
     model_name = ['classify_cnn1d_big_best300_512batch_denoising.ckpt',
                   'classify_cnn1d_medium_best300_512batch_denoising.ckpt',
                   'classify_cnn1d_small_best300_512batch_denoising.ckpt']
-    log_dirs = ['./run/05091047', './run/05091147', './run/05091247']
+    log_dirs = ['./run/05111522', './run/05111622', './run/05111722']
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
         train_classification_step(device, model, config_id, log_dir, train_dataloader=train_dataloader,
-                                  test_dataloader=test_dataloader, n_epochs=300,
-                                  denoising_properties=denoising_properties)
+                                  test_dataloader=test_dataloader, n_epochs=300)
 
 
 def train_sd_ddim():
-    model_names = ['reduce_noise_model_bi_lstm_big_my_loss_power_snr.pth',
-                   'reduce_noise_model_bi_lstm_medium_my_loss_power_snr.pth',
-                   'reduce_noise_model_bi_lstm_small_my_loss_power_snr.pth']
+    model_names = ['reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth',
+                   'reduce_noise_model_bi_lstm_medium_huber_loss_power_snr.pth',
+                   'reduce_noise_model_bi_lstm_small_huber_loss_power_snr.pth']
     log_dirs = ['./run/05101523', './run/05101623', './run/05101723']
     config_ids = [11, 12, 13]
     for model_name, config_id, log_dir in zip(model_names, config_ids, log_dirs):
@@ -478,4 +477,4 @@ def train_sd_ddim():
 
 
 if __name__ == '__main__':
-    train_sd_ddim()
+    train_classification()

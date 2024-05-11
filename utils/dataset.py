@@ -353,23 +353,23 @@ def get_shape():  # 获取输入的形状
     return 1, 1, 512
 
 
-def make_noise(x: tensor, t: tensor) -> tensor:
+def make_noise(t: tensor) -> tensor:
     """
     生成高斯白噪声
-    :param x:输入信号
-    :param t:当前步，用于计算信噪比
+    :param t:当前步
     :return:噪声的信号
     """
-    x = x.detach().cpu().numpy()
-    x = x.reshape(-1, len(x[0][0]))
     t = t.detach().cpu().numpy()
     snr = 30 - np.power(t, 0.55)  # 计算信噪比, 该公式应当根据实际情况调整
     noises = []
     snr_linears = 10 ** (snr / 10)
-    for signal, snr_linear in zip(x, snr_linears):
-        signal_power = np.mean(signal ** 2)
-        noise_power = signal_power / snr_linear
-        noises.append(np.random.randn(len(signal)) * np.sqrt(noise_power))
+    if isinstance(snr_linears, np.ndarray):
+        for snr_linear in snr_linears:
+            noise_power = 1 / snr_linear
+            noises.append(np.random.randn(get_shape()[-1]) * np.sqrt(noise_power))
+    else:
+        noise_power = 1 / snr_linears
+        noises.append(np.random.randn(get_shape()[-1]) * np.sqrt(noise_power))
     noises = np.array(noises)
     noises = noises.reshape(-1, 1, len(noises[0]))
     return tensor(noises, dtype=float32)

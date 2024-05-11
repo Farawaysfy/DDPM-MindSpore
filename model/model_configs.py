@@ -69,21 +69,21 @@ bi_lstm_small_cfg = {
     'type': 'BiLSTM',
     'lstm_hidden_size': 32,  # lstm隐藏层大小
     'pe_dim': 128,
-    'num_layers': 128,
+    'num_layers': 4,
 }
 
 bi_lstm_medium_cfg = {
     'type': 'BiLSTM',
     'lstm_hidden_size': 32,
     'pe_dim': 128,
-    'num_layers': 256,
+    'num_layers': 8,
 }
 
 bi_lstm_big_cfg = {
     'type': 'BiLSTM',
     'lstm_hidden_size': 32,
     'pe_dim': 128,
-    'num_layers': 512,
+    'num_layers': 16,
 }
 convnet1d_big_classify_cfg = {
     'type': 'ConvNet1DClassify',
