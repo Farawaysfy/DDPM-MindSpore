@@ -468,14 +468,14 @@ def prepare_data(data_path='./data', add_noise=False, denoising_properties=None)
             plt.xlabel('time')
             plt.ylabel('amplitude')
         # 保存图像
-        plt.savefig(os.path.join('./work_dirs', task_type + '_signal.png'))
+        plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
         # 将处理后的数据保存
         dataset.save(root_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr')
     else:
         dataset = Signals(data_path, slice_length=512, slice_type='cut', add_noise=add_noise)
         task_type = 'original' if not add_noise else 'noisy'
         # 取出前8个信号，绘制信号的图
-        fig, ax = plt.subplots(2, 4, figsize=(10, 10))
+        fig, ax = plt.subplots(2, 4, figsize=(10, 6))
         fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
             plt.subplot(2, 4, i + 1)
@@ -483,8 +483,8 @@ def prepare_data(data_path='./data', add_noise=False, denoising_properties=None)
             plt.title(task_type + f'signal {i + 1}')
             plt.xlabel('time')
             plt.ylabel('amplitude')
-        plt.savefig(os.path.join('./work_dirs', task_type + '_signal.png'))
-
+        plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
+    print('data prepared')
     return dataset, task_type
 
 
@@ -535,14 +535,14 @@ if __name__ == '__main__':
         'root_dir': './model/sdddim_model',  # 保存模型的路径
         'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
     }
-    prepare_data(add_noise=True, denoising_properties=denoising_properties)  # 准备数据，添加噪声，以及去噪
-    prepare_data(add_noise=False)  # 准备数据，不添加噪声
-    prepare_data(add_noise=True)  # 准备数据，添加噪声
-    # train_classification(log_dirs=['./run/05121330', './run/05121430', './run/05121530', './run/05121630'],
-    #                      denoising_properties=denoising_properties)  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
-    #
-    # train_classification(log_dirs=['./run/05121730', './run/05121830', './run/05121930', './run/05122030'],
-    #                      add_noise=True)  # 训练分类模型， 输入为带噪声的信号
-    #
-    # train_classification(
-    #     log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
+    # prepare_data(add_noise=True, denoising_properties=denoising_properties)  # 准备数据，添加噪声，以及去噪
+    # prepare_data(add_noise=False)  # 准备数据，不添加噪声
+    # prepare_data(add_noise=True)  # 准备数据，添加噪声
+    train_classification(log_dirs=['./run/05121330', './run/05121430', './run/05121530', './run/05121630'],
+                         denoising_properties=denoising_properties)  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
+
+    train_classification(log_dirs=['./run/05121730', './run/05121830', './run/05121930', './run/05122030'],
+                         add_noise=True)  # 训练分类模型， 输入为带噪声的信号
+
+    train_classification(
+        log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
