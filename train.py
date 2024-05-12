@@ -417,17 +417,14 @@ def train_classification_step(device, model_name, config_id, log_dir, train_data
               ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs)
 
 
-def train_classification(log_dirs, add_noise=False, denoising_properties=None):
+def prepare_data(data_path='./data', add_noise=False, denoising_properties=None):
     """
-    训练分类模型, 可以选择是否添加噪声，以及是否去噪
-    :param log_dirs: 保存模型的路径，tensorboard的log路径，
+    准备数据，根据是否添加噪声，以及是否去噪，选择不同的数据集
+    :param data_path: 数据集路径
     :param add_noise: 是否添加噪声
     :param denoising_properties: 去噪属性
     """
-    os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    data_path = './data'
-
     # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
     if denoising_properties:
         add_noise = True
@@ -488,6 +485,23 @@ def train_classification(log_dirs, add_noise=False, denoising_properties=None):
             plt.ylabel('amplitude')
         plt.savefig(os.path.join('./work_dirs', task_type + '_signal.png'))
 
+    return dataset, task_type
+
+
+def train_classification(log_dirs, data_path='./data', add_noise=False, denoising_properties=None):
+    """
+    训练分类模型, 可以选择是否添加噪声，以及是否去噪
+    :param log_dirs: 保存模型的路径，tensorboard的log路径，
+    :param data_path: 数据集路径
+    :param add_noise: 是否添加噪声
+    :param denoising_properties: 去噪属性
+    """
+    os.makedirs('work_dirs', exist_ok=True)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
+    dataset, task_type = prepare_data(data_path, add_noise, denoising_properties)
+
     # 准备数据，选择不同的模型，以及不同的log路径，训练分类模型
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
@@ -521,11 +535,14 @@ if __name__ == '__main__':
         'root_dir': './model/sdddim_model',  # 保存模型的路径
         'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
     }
-    train_classification(log_dirs=['./run/05121330', './run/05121430', './run/05121530', './run/05121630'],
-                         denoising_properties=denoising_properties)  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
-
-    train_classification(log_dirs=['./run/05121730', './run/05121830', './run/05121930', './run/05122030'],
-                         add_noise=True)  # 训练分类模型， 输入为带噪声的信号
-
-    train_classification(
-        log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
+    prepare_data(add_noise=True, denoising_properties=denoising_properties)  # 准备数据，添加噪声，以及去噪
+    prepare_data(add_noise=False)  # 准备数据，不添加噪声
+    prepare_data(add_noise=True)  # 准备数据，添加噪声
+    # train_classification(log_dirs=['./run/05121330', './run/05121430', './run/05121530', './run/05121630'],
+    #                      denoising_properties=denoising_properties)  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
+    #
+    # train_classification(log_dirs=['./run/05121730', './run/05121830', './run/05121930', './run/05122030'],
+    #                      add_noise=True)  # 训练分类模型， 输入为带噪声的信号
+    #
+    # train_classification(
+    #     log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
