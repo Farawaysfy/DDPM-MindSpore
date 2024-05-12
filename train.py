@@ -427,6 +427,8 @@ def train_classification(log_dirs, add_noise=False, denoising_properties=None):
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     data_path = './data'
+
+    # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
     if denoising_properties:
         add_noise = True
         dataset = Signals(data_path, slice_length=512, slice_type='cut', add_noise=add_noise)
@@ -485,6 +487,8 @@ def train_classification(log_dirs, add_noise=False, denoising_properties=None):
             plt.xlabel('time')
             plt.ylabel('amplitude')
         plt.savefig(os.path.join('./work_dirs', task_type + '_signal.png'))
+
+    # 准备数据，选择不同的模型，以及不同的log路径，训练分类模型
     train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
@@ -512,10 +516,10 @@ def train_sd_ddim():
 
 if __name__ == '__main__':
     denoising_properties = {
-        'n_steps': 2000,
+        'n_steps': 2000,  # ddpm的步数
         'config_id': 11,  # 11, 12, 13, 分别对应大中小
-        'root_dir': './model/sdddim_model',
-        'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'
+        'root_dir': './model/sdddim_model',  # 保存模型的路径
+        'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
     }
     train_classification(log_dirs=['./run/05121330', './run/05121430', './run/05121530', './run/05121630'],
                          denoising_properties=denoising_properties)  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
@@ -523,4 +527,5 @@ if __name__ == '__main__':
     train_classification(log_dirs=['./run/05121730', './run/05121830', './run/05121930', './run/05122030'],
                          add_noise=True)  # 训练分类模型， 输入为带噪声的信号
 
-    train_classification(log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
+    train_classification(
+        log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
