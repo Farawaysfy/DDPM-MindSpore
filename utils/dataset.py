@@ -67,6 +67,9 @@ class Signal:
         dataLabels = [v[0][0] for v in rawData['data'][0]]
         data = [[v[1].T[0]] for v in rawData['data'][0]]
         data = np.array(data)  # 将数据转换为numpy数组
+        # 去掉前20%和后20%的数据
+        data = [v[:, int(len(v[0]) * 0.2):int(len(v[0]) * 0.8)] for v in data]
+        data = np.array(data)  # 将数据转换为numpy数组
         if self.add_noise:
             original, data = generate_mixed_signal_data(data)
             # 绘制原始信号和带噪声的信号
@@ -185,15 +188,10 @@ class Signals(Dataset):
                 data.append(selected_column[j].reshape(1, -1))
                 # 获取标签
                 target.append(self.labels[selected_column.index[j].split('_')[0]])
-        if self.slice_type != 'cut' and self.slice_type != 'windows':
-            # 获取最小的数据长度
-            min_length = min([len(d[0]) for d in data])
-            # 将数据填充为最小长度
-            data = [d[:, :min_length] for d in data]
-            data = [d[:, int(0.2 * min_length):] for d in data]
-        else:
-            # 去掉前20%的数据
-            data = data[int(0.2*len(data)):]
+        if self.slice_type != 'cut' and self.slice_type != 'window':
+            # 统一数据长度, 使其具有相同的长度
+            min_length = min([len(v[0]) for v in data])
+            data = [v[:, :min_length] for v in data]
         data = np.array(data)
         target = np.array(target)
         return data, target

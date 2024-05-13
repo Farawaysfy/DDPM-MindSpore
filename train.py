@@ -532,9 +532,17 @@ def train_classification(log_dirs, ds_config, add_noise=False, denoising_propert
     n_epochs = 1000
     # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
     dataset, task_type = prepare_data(**ds_config, add_noise=add_noise, denoising_properties=denoising_properties)
-
+    data = dataset.data
+    target = dataset.target
+    seed = 66
+    torch.manual_seed(seed)
+    # 为了保证每次的结果一致，设置随机种子,打乱数据
+    np.random.seed(seed)
+    np.random.shuffle(data)
+    np.random.seed(seed)
+    np.random.shuffle(target)
     # 准备数据，选择不同的模型，以及不同的log路径，训练分类模型
-    train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.4)
+    train_data, test_data, train_labels, test_labels = train_test_split(data, target, test_size=0.4)
     test_data, val_data, test_labels, val_labels = train_test_split(test_data, test_labels, test_size=0.5)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
