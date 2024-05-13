@@ -357,7 +357,7 @@ def train_ddpm(device, model_name, data_path, config_id, log_dir, n_epochs=500):
                     n_epochs=n_epochs)
 
 
-def cnn_train(writer, net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
+def cnn_train(writer, net, train_dataloader, val_dataloader, device, ckpt_path, log_dir,
               n_epochs):  # 训练cnn1d分类模型
     createFolder(log_dir)
     net = net.to(device).float()
@@ -367,13 +367,13 @@ def cnn_train(writer, net, train_dataloader, test_dataloader, device, ckpt_path,
     best_acc = 0
     train_acces = []
     train_losses = []
-    test_acces = []
-    test_losses = []
+    val_acces = []
+    val_losses = []
     for e in range(n_epochs):
         train_acc = 0
         train_loss = 0
-        test_acc = 0
-        test_loss = 0
+        val_acc = 0
+        val_loss = 0
         for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device).float()
             y = y.to(device).long()
@@ -384,35 +384,36 @@ def cnn_train(writer, net, train_dataloader, test_dataloader, device, ckpt_path,
             optimizer.step()  # 更新参数
             train_acc += (logits.argmax(dim=-1) == y).float().mean()
             train_loss += loss.item()
-        for x, y in tqdm(test_dataloader, desc='test Epoch {}'.format(e)):  # 测试
+        net.eval()
+        for x, y in tqdm(val_dataloader, desc='val Epoch {}'.format(e)):  # 测试
             x = x.to(device).float()
             y = y.to(device).long()
             logits = net(x)
             loss = loss_fn(logits, y)
-            test_acc += (logits.argmax(dim=-1) == y).float().mean()
-            test_loss += loss.item()
+            val_acc += (logits.argmax(dim=-1) == y).float().mean()
+            val_loss += loss.item()
         train_acces.append(train_acc / len(train_dataloader))
         train_losses.append(train_loss / len(train_dataloader))
-        test_acces.append(test_acc / len(test_dataloader))
-        test_losses.append(test_loss / len(test_dataloader))
-        writer.add_scalars('acc', {'train': train_acces[-1], 'test': test_acces[-1]}, e)
-        writer.add_scalars('loss', {'train': train_losses[-1], 'test': test_losses[-1]}, e)
+        val_acces.append(val_acc / len(val_dataloader))
+        val_losses.append(val_loss / len(val_dataloader))
+        writer.add_scalars('acc', {'train': train_acces[-1], 'val': val_acces[-1]}, e)
+        writer.add_scalars('loss', {'train': train_losses[-1], 'val': val_losses[-1]}, e)
         # 检测是否过拟合，如果过拟合则停止训练, Early Stop
-        ealy_stop(test_losses[-1], net)
+        ealy_stop(val_losses[-1], net)
         if ealy_stop.early_stop:
             print('Early stopping')
             break
-        if test_acc > best_acc:
+        if val_acc > best_acc:
             torch.save(net.state_dict(), os.path.join(log_dir, ckpt_path))
-            best_acc = test_acc
+            best_acc = val_acc
     print('Done')
 
 
 def train_classification_step(writer, device, model_name, config_id, log_dir, train_dataloader=None,
-                              test_dataloader=None, n_epochs=500):
+                              val_dataloader=None, n_epochs=500):
     config = configs[config_id]
     net = build_network(config)
-    cnn_train(writer, net, train_dataloader=train_dataloader, test_dataloader=test_dataloader, device=device,
+    cnn_train(writer, net, train_dataloader=train_dataloader, val_dataloader=val_dataloader, device=device,
               ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs)
 
 
@@ -502,21 +503,20 @@ def prepare_data(data_path='./data',
     return dataset, task_type
 
 
-def validate_classification(writer, device, model, config_id, log_dir, val_dataloader):
+def test_classification(writer, device, model, config_id, log_dir, test_dataloader):
     config = configs[config_id]
     net = build_network(config)
     net.load_state_dict(torch.load(os.path.join(log_dir, model)))
-
+    net = net.to(device).eval()
     with torch.no_grad():
-        net = net.to(device).eval()
         acc = 0
-        for x, y in tqdm(val_dataloader, desc='validating'):
+        for x, y in tqdm(test_dataloader, desc='validating'):
             x = x.to(device).float()
             y = y.to(device).long()
             logits = net(x)
             acc += (logits.argmax(dim=-1) == y).float().mean()
-        acc /= len(val_dataloader)
-        writer.add_scalar('val acc', acc.item())
+        acc /= len(test_dataloader)
+        writer.add_scalar('test acc', acc.item())
         print(f'accuracy: {acc.item()}')
         return acc.item()
 
@@ -566,8 +566,8 @@ def train_classification(log_dirs, ds_config, add_noise=False, denoising_propert
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
         writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
         train_classification_step(writer, device, model, config_id, log_dir, train_dataloader=train_dataloader,
-                                  test_dataloader=test_dataloader, n_epochs=n_epochs)
-        validate_classification(writer, device, model, config_id, log_dir, val_dataloader)
+                                  val_dataloader=val_dataloader, n_epochs=n_epochs)
+        test_classification(writer, device, model, config_id, log_dir, test_dataloader)
 
 
 def train_sd_ddim():
@@ -593,32 +593,14 @@ if __name__ == '__main__':
     # prepare_data(add_noise=True, denoising_properties=denoising_properties)  # 准备数据，添加噪声，以及去噪
     # prepare_data(add_noise=False)  # 准备数据，不添加噪声
     # prepare_data(add_noise=True)  # 准备数据，添加噪声
-    del_labels = ['Aligned', 'Parallel', 'Unbalance']  # 删除的标签,
-    # 一共有8个标签,分别是
-    #         dic = {
-    #             'Aligned': 0,
-    #             'Bearing': 1,
-    #             'Bowed': 2,
-    #             'Broken': 3,
-    #             'Normal': 4,
-    #             'Parallel': 5,
-    #             'SWF': 6,
-    #             'Unbalance': 7,
-    #         }
-    # 删除后剩下5个标签
-    # dic = {
-    #     'Bearing': 0,
-    #     'Bowed': 1,
-    #     'Broken': 2,
-    #     'Normal': 3,
-    #     'SWF': 4,
-    # }
+    # del_labels = ['Aligned', 'Parallel', 'Unbalance']  # 删除的标签,
+    # 一共有8个标签,分别是 Aligned, Bearing, Bowed, Broken, Normal, Parallel, SWF, Unbalance
+    # 删除后剩下5个标签，分别是 Bearing, Bowed, Broken, Normal, SWF
     dataset_config = {
         'data_path': './data',
         'slice_length': 512,
         'slice_type': 'window',  # 'cut','window'
         'windows_ratio': 0.1,
-        'delete_labels': del_labels
     }
     train_classification(
         log_dirs=['./run/0513mini_n', './run/0513small_n', './run/0513medium_n', './run/0513big_n'],
