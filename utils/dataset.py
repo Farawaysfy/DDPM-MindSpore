@@ -351,7 +351,7 @@ def generate_mixed_signal_data(signals: np.ndarray):
         signal_power = np.mean(signal ** 2)
 
         # 给定信噪比，计算噪声功率
-        snr = np.random.randint(-20, -10)  # 信噪比在-20到-10之间随机取值
+        snr = np.random.randint(-30, -10)  # 信噪比在-20到-10之间随机取值
         snr_linear = 10 ** (snr / 10)
         noise_power = signal_power / snr_linear
 

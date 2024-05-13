@@ -22,7 +22,7 @@ from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, creat
 from utils.early_stop import EarlyStopping
 from utils.fft_plot import FFTPlot
 
-batch_size = 2048  # 最大化利用显存
+batch_size = 512  # 最大化利用显存
 _exp_name = "sample"
 
 
@@ -441,12 +441,13 @@ def prepare_data(data_path='./data',
         dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
         task_type = 'denoising'
-        # 取出前8个信号，绘制信号的图
+        # 随机取出8个信号，绘制信号的图
+        indexes = np.random.choice(len(dataset.data), 8, replace=False)
         fig, ax = plt.subplots(4, 4, figsize=(10, 10))
         fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
             plt.subplot(4, 4, i + 1)
-            plt.plot(dataset.data[i][0])
+            plt.plot(dataset.data[indexes[i]][0])
             plt.title(f'signal {i + 1}')
             plt.xlabel('time')
             plt.ylabel('amplitude')
@@ -474,7 +475,7 @@ def prepare_data(data_path='./data',
         # 绘制8个处理后的信号
         for i in range(8, 16):
             plt.subplot(4, 4, i + 1)
-            plt.plot(dataset.data[i][0])
+            plt.plot(dataset.data[indexes[i - 8]][0])
             plt.title(task_type + f'signal {i - 7}')
             plt.xlabel('time')
             plt.ylabel('amplitude')
@@ -487,11 +488,12 @@ def prepare_data(data_path='./data',
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
         task_type = 'original' if not add_noise else 'noisy'
         # 取出前8个信号，绘制信号的图
+        indexes = np.random.choice(len(dataset.data), 8, replace=False)
         fig, ax = plt.subplots(2, 4, figsize=(10, 6))
         fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
             plt.subplot(2, 4, i + 1)
-            plt.plot(dataset.data[i][0])
+            plt.plot(dataset.data[indexes[i]][0])
             plt.title(task_type + f'signal {i + 1}')
             plt.xlabel('time')
             plt.ylabel('amplitude')
@@ -519,7 +521,7 @@ def validate_classification(writer, device, model, config_id, log_dir, val_datal
         return acc.item()
 
 
-def train_classification(log_dirs, ds_config, add_noise=False, denoising_properties=None):
+def train_classification(log_dirs, ds_config, add_noise=False, denoising_properties=None, batch_size=512):
     """
     训练分类模型, 可以选择是否添加噪声，以及是否去噪
     :param log_dirs: 保存模型的路径，tensorboard的log路径，
@@ -536,6 +538,12 @@ def train_classification(log_dirs, ds_config, add_noise=False, denoising_propert
     target = dataset.target
     seed = 66
     torch.manual_seed(seed)
+
+    # 随机选择2000个样本
+    # np.random.seed(seed)
+    # idxes = np.random.choice(len(data), 5 * 1024, replace=False)
+    # data, target = data[idxes], target[idxes]
+
     # 为了保证每次的结果一致，设置随机种子,打乱数据
     np.random.seed(seed)
     np.random.shuffle(data)
@@ -544,9 +552,12 @@ def train_classification(log_dirs, ds_config, add_noise=False, denoising_propert
     # 准备数据，选择不同的模型，以及不同的log路径，训练分类模型
     train_data, test_data, train_labels, test_labels = train_test_split(data, target, test_size=0.4)
     test_data, val_data, test_labels, val_labels = train_test_split(test_data, test_labels, test_size=0.5)
-    train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
-    test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
-    val_dataloader = DataLoader(TensorDataset(tensor(val_data), tensor(val_labels)), batch_size=512, shuffle=False)
+    train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)),
+                                  batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)),
+                                 batch_size=batch_size, shuffle=False)
+    val_dataloader = DataLoader(TensorDataset(tensor(val_data), tensor(val_labels)),
+                                batch_size=batch_size, shuffle=False)
     config_ids = [17, 16, 15, 14]
     model_name = ['classify_cnn1d_mini_best300_512batch_' + task_type + '.ckpt',
                   'classify_cnn1d_small_best300_512batch_' + task_type + '.ckpt',
@@ -572,6 +583,7 @@ def train_sd_ddim():
 
 
 if __name__ == '__main__':
+    batch_size = 512
     d_p = {
         'n_steps': 2000,  # ddpm的步数
         'config_id': 11,  # 11, 12, 13, 分别对应大中小
@@ -604,21 +616,21 @@ if __name__ == '__main__':
     dataset_config = {
         'data_path': './data',
         'slice_length': 512,
-        'slice_type': 'cut',
-        'windows_ratio': 0.5,
+        'slice_type': 'window',  # 'cut','window'
+        'windows_ratio': 0.1,
         'delete_labels': del_labels
     }
     train_classification(
         log_dirs=['./run/0513mini_n', './run/0513small_n', './run/0513medium_n', './run/0513big_n'],
-        ds_config=dataset_config, add_noise=True
+        ds_config=dataset_config, add_noise=True, batch_size=batch_size
     )  # 训练分类模型， 输入为带噪声的信号
 
     train_classification(
         log_dirs=['./run/0513mini_o', './run/0513small_o', './run/0513medium_o', './run/0513big_o'],
-        ds_config=dataset_config, add_noise=False
+        ds_config=dataset_config, add_noise=False, batch_size=batch_size
     )  # 训练分类模型， 输入为原始信号
 
     train_classification(
         log_dirs=['./run/0513mini_dn', './run/0513small_dn', './run/0513medium_dn', './run/0513big_dn']
-        , denoising_properties=d_p, ds_config=dataset_config
+        , denoising_properties=d_p, ds_config=dataset_config, batch_size=batch_size
     )  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
