@@ -600,7 +600,7 @@ if __name__ == '__main__':
         'data_path': './data',
         'slice_length': 512,
         'slice_type': 'window',  # 'cut','window'
-        'windows_ratio': 0.1,
+        'windows_ratio': 0.05,
     }
     train_classification(
         log_dirs=['./run/0513mini_n', './run/0513small_n', './run/0513medium_n', './run/0513big_n'],
