@@ -357,10 +357,9 @@ def train_ddpm(device, model_name, data_path, config_id, log_dir, n_epochs=500):
                     n_epochs=n_epochs)
 
 
-def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
+def cnn_train(writer, net, train_dataloader, test_dataloader, device, ckpt_path, log_dir,
               n_epochs):  # 训练cnn1d分类模型
     createFolder(log_dir)
-    writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
     net = net.to(device).float()
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adamax(net.parameters(), 1e-3, weight_decay=1e-5)
@@ -409,26 +408,38 @@ def cnn_train(net, train_dataloader, test_dataloader, device, ckpt_path, log_dir
     print('Done')
 
 
-def train_classification_step(device, model_name, config_id, log_dir, train_dataloader=None,
+def train_classification_step(writer, device, model_name, config_id, log_dir, train_dataloader=None,
                               test_dataloader=None, n_epochs=500):
     config = configs[config_id]
     net = build_network(config)
-    cnn_train(net, train_dataloader=train_dataloader, test_dataloader=test_dataloader, device=device,
+    cnn_train(writer, net, train_dataloader=train_dataloader, test_dataloader=test_dataloader, device=device,
               ckpt_path=model_name, log_dir=log_dir, n_epochs=n_epochs)
 
 
-def prepare_data(data_path='./data', add_noise=False, denoising_properties=None):
+def prepare_data(data_path='./data',
+                 slice_length=get_shape()[-1],
+                 slice_type='cut',
+                 windows_ratio=0.5,
+                 delete_labels=None,
+                 add_noise=False,
+                 denoising_properties=None):
     """
     准备数据，根据是否添加噪声，以及是否去噪，选择不同的数据集
     :param data_path: 数据集路径
+    :param slice_length: 切片长度
+    :param slice_type: 切片类型
+    :param windows_ratio: 窗口比例
+    :param delete_labels: 删除的标签
     :param add_noise: 是否添加噪声
     :param denoising_properties: 去噪属性
     """
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
     if denoising_properties:
         add_noise = True
-        dataset = Signals(data_path, slice_length=512, slice_type='cut', add_noise=add_noise)
+        dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
+                          add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
         task_type = 'denoising'
         # 取出前8个信号，绘制信号的图
         fig, ax = plt.subplots(4, 4, figsize=(10, 10))
@@ -472,7 +483,8 @@ def prepare_data(data_path='./data', add_noise=False, denoising_properties=None)
         # 将处理后的数据保存
         dataset.save(root_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr')
     else:
-        dataset = Signals(data_path, slice_length=512, slice_type='cut', add_noise=add_noise)
+        dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
+                          add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
         task_type = 'original' if not add_noise else 'noisy'
         # 取出前8个信号，绘制信号的图
         fig, ax = plt.subplots(2, 4, figsize=(10, 6))
@@ -488,39 +500,62 @@ def prepare_data(data_path='./data', add_noise=False, denoising_properties=None)
     return dataset, task_type
 
 
-def train_classification(log_dirs, data_path='./data', add_noise=False, denoising_properties=None):
+def validate_classification(writer, device, model, config_id, log_dir, val_dataloader):
+    config = configs[config_id]
+    net = build_network(config)
+    net.load_state_dict(torch.load(os.path.join(log_dir, model)))
+
+    with torch.no_grad():
+        net = net.to(device).eval()
+        acc = 0
+        for x, y in tqdm(val_dataloader, desc='validating'):
+            x = x.to(device).float()
+            y = y.to(device).long()
+            logits = net(x)
+            acc += (logits.argmax(dim=-1) == y).float().mean()
+        acc /= len(val_dataloader)
+        writer.add_scalar('val acc', acc.item())
+        print(f'accuracy: {acc.item()}')
+        return acc.item()
+
+
+def train_classification(log_dirs, ds_config, add_noise=False, denoising_properties=None):
     """
     训练分类模型, 可以选择是否添加噪声，以及是否去噪
     :param log_dirs: 保存模型的路径，tensorboard的log路径，
-    :param data_path: 数据集路径
+    :param ds_config: 数据集配置
     :param add_noise: 是否添加噪声
     :param denoising_properties: 去噪属性
     """
     os.makedirs('work_dirs', exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+    n_epochs = 1000
     # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
-    dataset, task_type = prepare_data(data_path, add_noise, denoising_properties)
+    dataset, task_type = prepare_data(**ds_config, add_noise=add_noise, denoising_properties=denoising_properties)
 
     # 准备数据，选择不同的模型，以及不同的log路径，训练分类模型
-    train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.2)
+    train_data, test_data, train_labels, test_labels = train_test_split(dataset.data, dataset.target, test_size=0.4)
+    test_data, val_data, test_labels, val_labels = train_test_split(test_data, test_labels, test_size=0.5)
     train_dataloader = DataLoader(TensorDataset(tensor(train_data), tensor(train_labels)), batch_size=512, shuffle=True)
     test_dataloader = DataLoader(TensorDataset(tensor(test_data), tensor(test_labels)), batch_size=512, shuffle=False)
+    val_dataloader = DataLoader(TensorDataset(tensor(val_data), tensor(val_labels)), batch_size=512, shuffle=False)
     config_ids = [17, 16, 15, 14]
     model_name = ['classify_cnn1d_mini_best300_512batch_' + task_type + '.ckpt',
                   'classify_cnn1d_small_best300_512batch_' + task_type + '.ckpt',
                   'classify_cnn1d_medium_best300_512batch_' + task_type + '.ckpt',
                   'classify_cnn1d_big_best300_512batch_' + task_type + '.ckpt']
     for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
-        train_classification_step(device, model, config_id, log_dir, train_dataloader=train_dataloader,
-                                  test_dataloader=test_dataloader, n_epochs=1000)
+        writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
+        train_classification_step(writer, device, model, config_id, log_dir, train_dataloader=train_dataloader,
+                                  test_dataloader=test_dataloader, n_epochs=n_epochs)
+        validate_classification(writer, device, model, config_id, log_dir, val_dataloader)
 
 
 def train_sd_ddim():
     model_names = ['reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth',
                    'reduce_noise_model_bi_lstm_medium_huber_loss_power_snr.pth',
                    'reduce_noise_model_bi_lstm_small_huber_loss_power_snr.pth']
-    log_dirs = ['./run/05101523', './run/05101623', './run/05101723']
+    log_dirs = ['./run/0510biglstm', './run/0510mediumlstm', './run/0510smalllstm']
     config_ids = [11, 12, 13]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -529,20 +564,53 @@ def train_sd_ddim():
 
 
 if __name__ == '__main__':
-    denoising_properties = {
+    d_p = {
         'n_steps': 2000,  # ddpm的步数
         'config_id': 11,  # 11, 12, 13, 分别对应大中小
-        'root_dir': './model/sdddim_model',  # 保存模型的路径
+        'root_dir': './run/0510biglstm',  # 保存模型的路径
         'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
     }
     # prepare_data(add_noise=True, denoising_properties=denoising_properties)  # 准备数据，添加噪声，以及去噪
     # prepare_data(add_noise=False)  # 准备数据，不添加噪声
     # prepare_data(add_noise=True)  # 准备数据，添加噪声
-    train_classification(log_dirs=['./run/05121330', './run/05121430', './run/05121530', './run/05121630'],
-                         denoising_properties=denoising_properties)  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
-
-    train_classification(log_dirs=['./run/05121730', './run/05121830', './run/05121930', './run/05122030'],
-                         add_noise=True)  # 训练分类模型， 输入为带噪声的信号
+    del_labels = ['Aligned', 'Parallel', 'Unbalance']  # 删除的标签,
+    # 一共有8个标签,分别是
+    #         dic = {
+    #             'Aligned': 0,
+    #             'Bearing': 1,
+    #             'Bowed': 2,
+    #             'Broken': 3,
+    #             'Normal': 4,
+    #             'Parallel': 5,
+    #             'SWF': 6,
+    #             'Unbalance': 7,
+    #         }
+    # 删除后剩下5个标签
+    # dic = {
+    #     'Bearing': 0,
+    #     'Bowed': 1,
+    #     'Broken': 2,
+    #     'Normal': 3,
+    #     'SWF': 4,
+    # }
+    dataset_config = {
+        'data_path': './data',
+        'slice_length': 512,
+        'slice_type': 'cut',
+        'windows_ratio': 0.5,
+        'delete_labels': del_labels
+    }
+    train_classification(
+        log_dirs=['./run/0513mini_n', './run/0513small_n', './run/0513medium_n', './run/0513big_n'],
+        ds_config=dataset_config, add_noise=True
+    )  # 训练分类模型， 输入为带噪声的信号
 
     train_classification(
-        log_dirs=['./run/05122130', './run/05122230', './run/05122330', './run/05122430'])  # 训练分类模型， 输入为原始信号
+        log_dirs=['./run/0513mini_o', './run/0513small_o', './run/0513medium_o', './run/0513big_o'],
+        ds_config=dataset_config, add_noise=False
+    )  # 训练分类模型， 输入为原始信号
+
+    train_classification(
+        log_dirs=['./run/0513mini_dn', './run/0513small_dn', './run/0513medium_dn', './run/0513big_dn']
+        , denoising_properties=d_p, ds_config=dataset_config
+    )  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号

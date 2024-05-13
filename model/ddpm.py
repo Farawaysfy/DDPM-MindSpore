@@ -615,4 +615,5 @@ def build_network(config: dict, n_steps=None):
     network_cls = network_mapping.get(network_type)
 
     network = network_cls(n_steps, **config) if n_steps is not None else network_cls(**config)
+    config['type'] = network_type  # Restore the original config
     return network

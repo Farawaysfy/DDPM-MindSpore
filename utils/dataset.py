@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from matplotlib import pyplot as plt
 from pandas import DataFrame
 from scipy.interpolate import make_interp_spline
 from scipy.io import loadmat, savemat
@@ -52,10 +53,10 @@ class Signal:
             'Unbalance': 7,
         }
         # fileName = self.path.split('\\')[-1]
-        self.label = -1
+        self.label = ""
         for key in dic:
             if key in path:
-                self.label = dic[key]
+                self.label = key
                 break
         df = self.loadMat()
         self.data = df.loc[['TimeData/Motor/S_x', 'TimeData/Motor/R_y', 'TimeData/Motor/T_z'],]  # 选择三个轴的数据
@@ -80,7 +81,7 @@ class Signal:
         # print("data[0]=", data[0])
         slices = []
         if self.slice_type == 'cut':
-            slices_labels = [str(self.label) + "_" + str(i) for i in
+            slices_labels = [self.label + "_" + str(i) for i in
                              range(len(data[0][0]) // self.slice_length)]  # 生成切片标签
             for v in data:  # 切片
                 temp = []
@@ -96,11 +97,11 @@ class Signal:
                     left += int(self.slice_length * self.windows_rate)
                     right += int(self.slice_length * self.windows_rate)
                 slices.append(temp)
-            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(slices[0]))]
+            slices_labels = [self.label + "_" + str(i) for i in range(len(slices[0]))]
         else:
             for v in data:  # 存储原始数据
                 slices.append([v[0]])
-            slices_labels = [str(self.label) + "_" + str(i) for i in range(len(slices[0]))]
+            slices_labels = [self.label + "_" + str(i) for i in range(len(slices[0]))]
         # print("dataLabels=", dataLabels)
         df = DataFrame(slices, index=dataLabels, columns=slices_labels, )
         # print("df=", df)
@@ -126,7 +127,6 @@ class Signal:
 
     def saveWaveform(self):
         for label in self.data.index:
-            temp = []
             savePath = os.path.join(self.path.replace('.mat', ''), "waveform" + str(self.slice_length), label.replace(
                 '/', '_'))
 
@@ -140,12 +140,32 @@ class Signal:
 
 class Signals(Dataset):
     def __init__(self, path, fs=5120, slice_length=512, slice_type='cut',
-                 add_noise=False, windows_rate=0.5):
+                 add_noise=False, windows_rate=0.5, delete_labels=None):
         self.signals = [Signal(os.path.join(path, f), fs, slice_length, slice_type, add_noise, windows_rate) for f in
                         os.listdir(path)
                         if
                         f.endswith('.mat')]
-        self.labels = [signal.label for signal in self.signals]
+        dic = {
+            'Aligned': 0,
+            'Bearing': 1,
+            'Bowed': 2,
+            'Broken': 3,
+            'Normal': 4,
+            'Parallel': 5,
+            'SWF': 6,
+            'Unbalance': 7,
+        }
+        # 去掉选定信号,'Aligned','Parallel','Unbalance'
+
+        if delete_labels is not None:
+            for label in delete_labels:
+                self.signals = [signal for signal in self.signals if label != signal.label]
+            # 更新 dic
+            for label in delete_labels:
+                dic.pop(label)
+            # 对dic重新赋值
+            dic = {key: i for i, key in enumerate(dic)}
+        self.labels = dic
         self.df = pd.concat([signal.data for signal in self.signals], axis=1)
         self.slice_type = slice_type
         self.data, self.target = self.makeDataSets()
@@ -163,8 +183,17 @@ class Signals(Dataset):
             for j in range(len(selected_column)):
                 # 将selected_column[j]转换为(1, x)的形状
                 data.append(selected_column[j].reshape(1, -1))
-                # 获取标签,并将标签转换为数字
-                target.append(eval(selected_column.index[j].split('_')[0]))
+                # 获取标签
+                target.append(self.labels[selected_column.index[j].split('_')[0]])
+        if self.slice_type != 'cut' and self.slice_type != 'windows':
+            # 获取最小的数据长度
+            min_length = min([len(d[0]) for d in data])
+            # 将数据填充为最小长度
+            data = [d[:, :min_length] for d in data]
+            data = [d[:, int(0.2 * min_length):] for d in data]
+        else:
+            # 去掉前20%的数据
+            data = data[int(0.2*len(data)):]
         data = np.array(data)
         target = np.array(target)
         return data, target
@@ -381,7 +410,6 @@ def process_signal(signal: tensor) -> tensor:
     :param signal: 输入信号
     :return: 处理后的信号
     """
-    x = np.linspace(0, signal.shape[2] - 1, signal.shape[2])
     signal = signal.flatten(1)
     signal = signal.detach().cpu().numpy()
     for i in range(len(signal)):
@@ -396,25 +424,17 @@ def process_signal(signal: tensor) -> tensor:
 
 if __name__ == '__main__':
     print('test')
-    dataSet = Signals('../data', slice_length=256, slice_type='cut')
-    # noise, data = generate_mixed_signal_data(dataSet.data)
-    noisy_signal = (make_noise(tensor(dataSet.data[0:64]), tensor([1000] * 64)).detach().cpu().numpy()
-                    + dataSet.data[0:64])
-
-    processed_signal = process_signal(noisy_signal)
-    noisy_fft = FFTPlot(noisy_signal[0][0], 'noisy', fs=5120)
-    noisy_fft.showOriginal()
-    processed_fft = FFTPlot(processed_signal[0][0], 'processed', fs=5120)
-    processed_fft.showOriginal()
-    # noise_dataset = Signals('../data', slice_length=512, slice_type='cut', add_noise=True)
-    # noise_fft = FFTPlot(noise_dataset.data[0][0], 'noisy', fs=5120)
-    # noise_fft.showOriginal()
-    # print(dataSet.df)
-    # data, _ = dataSet.__getitem__(0)
-
-    # print(dataSet.df[0])
-    # dataset = PictureData('../data', get_img_shape(), 32, 'stft', slice_length=5120, merged=False)
-    # dataset.showFigure(0)
-    # dataset.process()
-    # print(dataset.paths)
-    # dataset.getDataSet()
+    del_labels = ['Aligned', 'Parallel', 'Unbalance']
+    dataSet = Signals('../data', slice_type='origin', delete_labels=del_labels)
+    noise, data = generate_mixed_signal_data(dataSet.data)
+    save_path = '../work_dirs/noisy'
+    # 绘制原始信号和带噪声的信号
+    for i in range(len(data)):
+        plt.figure(figsize=(320, 6))
+        plt.plot(data[i][0], label='Noisy Signal', linestyle='--', linewidth=1)
+        plt.plot(noise[i][0], label='Original Signal', linewidth=1)
+        plt.xlabel("Sample Index")
+        plt.ylabel("Amplitude")
+        plt.legend()
+        plt.savefig(os.path.join(save_path, f'{i}.png'))
+        plt.close()
