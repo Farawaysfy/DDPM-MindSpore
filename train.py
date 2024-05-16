@@ -472,17 +472,18 @@ def prepare_data(data_path='./data',
             dataset.data[pre:] = cur
         # 绘制8个处理后的信号
         fig, axs = plt.subplots(4, 2, figsize=(12, 24))
-        fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
             ax = axs[i % 4, i // 4]
             ax.plot(noisy_signals[i][0], label='noisy signal')  # 绘制噪声信号
             ax.plot(dataset.data[indexes[i]][0], label='denoised signal')  # 绘制去噪后的信号
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
-            ax.set_title(task_type + f'signal {i + 1}, label is{dataset.target[indexes[i]]}')
+            ax.set_title(task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
             ax.legend()
         # 保存图像
+        fig.tight_layout()
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
+        plt.close()
         # 将处理后的数据保存
         dataset.save(root_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr')
     else:
@@ -494,16 +495,16 @@ def prepare_data(data_path='./data',
         for i in range(8):
             indexes.append(np.random.choice(np.where(dataset.target == i)[0]))
         fig, axs = plt.subplots(4, 2, figsize=(12, 24))
-        fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
             ax = axs[i % 4, i // 4]
             ax.plot(dataset.data[indexes[i]][0])
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
-            ax.set_title(task_type + f'signal {i + 1}, label is{dataset.target[indexes[i]]}')
+            ax.set_title(task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
 
-
+        fig.tight_layout()
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
+        plt.close()
     print('data prepared')
     return dataset, task_type
 
