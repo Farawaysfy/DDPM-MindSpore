@@ -203,21 +203,21 @@ class ConvNet1DClassify(nn.Module):
         for channel in intermediate_channels:
             self.cnn1d_blocks.append(nn.Sequential(
                 nn.Conv1d(prev_channel, channel, 3, 1, 1),
+                nn.BatchNorm1d(channel),
                 nn.ReLU(),
-                nn.BatchNorm1d(channel)
             ))
             prev_channel = channel
             if W <= 32:
                 self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
             else:
-                self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
                 self.cnn1d_blocks[-1].add_module('max pool', nn.MaxPool1d(2))
+                self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
                 W //= 2
 
         self.fces = nn.Sequential(
             nn.Linear(W * prev_channel, W // 2),
-            nn.Dropout(0.5),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(W // 2, out_dim)
         )
 

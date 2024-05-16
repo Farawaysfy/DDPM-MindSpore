@@ -436,6 +436,7 @@ def prepare_data(data_path='./data',
     """
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    plt.rcParams.update({'font.size': 18})  # 修改默认字体大小
     # 根据是否添加噪声，以及是否去噪，选择不同的数据集， 以及绘制不同的图像，确定不同的任务类型
     if denoising_properties:
         add_noise = True
@@ -471,9 +472,9 @@ def prepare_data(data_path='./data',
                                           simple_var=True).detach().cpu().numpy()
             dataset.data[pre:] = cur
         # 绘制8个处理后的信号
-        fig, axs = plt.subplots(4, 2, figsize=(12, 24))
+        fig, axs = plt.subplots(2, 4, figsize=(24, 10))
         for i in range(8):
-            ax = axs[i % 4, i // 4]
+            ax = axs[i // 4, i % 4]
             ax.plot(noisy_signals[i][0], label='noisy signal')  # 绘制噪声信号
             ax.plot(dataset.data[indexes[i]][0], label='denoised signal')  # 绘制去噪后的信号
             ax.set_xlabel('time')
@@ -481,6 +482,7 @@ def prepare_data(data_path='./data',
             ax.set_title(task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
             ax.legend()
         # 保存图像
+        fig.fontsize = 20
         fig.tight_layout()
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
         plt.close()
@@ -489,19 +491,20 @@ def prepare_data(data_path='./data',
     else:
         dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
-        task_type = 'original' if not add_noise else 'noisy'
+        task_type = 'pure' if not add_noise else 'noisy'
         # 根据dataset.target,选择8个不同标签的信号,使得每个标签的信号都有一个
         indexes = []
         for i in range(8):
             indexes.append(np.random.choice(np.where(dataset.target == i)[0]))
-        fig, axs = plt.subplots(4, 2, figsize=(12, 24))
+        fig, axs = plt.subplots(2, 4, figsize=(24, 10))
         for i in range(8):
-            ax = axs[i % 4, i // 4]
+            ax = axs[i // 4, i % 4]
             ax.plot(dataset.data[indexes[i]][0])
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
             ax.set_title(task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
 
+        fig.fontsize = 20
         fig.tight_layout()
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
         plt.close()
@@ -593,7 +596,7 @@ if __name__ == '__main__':
     d_p = {
         'n_steps': 2000,  # ddpm的步数
         'config_id': 11,  # 11, 12, 13, 分别对应大中小
-        'root_dir': './run/0510biglstm',  # 保存模型的路径
+        'root_dir': './model/sdddim_model',  # 保存模型的路径
         'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
     }
     prepare_data(add_noise=True, denoising_properties=d_p)  # 准备数据，添加噪声，以及去噪
