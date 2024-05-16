@@ -442,16 +442,13 @@ def prepare_data(data_path='./data',
         dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
         task_type = 'denoising'
-        # 随机取出8个信号，绘制信号的图
-        indexes = np.random.choice(len(dataset.data), 8, replace=False)
-        fig, ax = plt.subplots(4, 4, figsize=(10, 10))
-        fig.tight_layout(h_pad=5, w_pad=5)
+        # 根据dataset.target,选择8个不同标签的信号,使得每个标签的信号都有一个
+        indexes = []
         for i in range(8):
-            plt.subplot(4, 4, i + 1)
-            plt.plot(dataset.data[indexes[i]][0])
-            plt.title(f'signal {i + 1}')
-            plt.xlabel('time')
-            plt.ylabel('amplitude')
+            indexes.append(np.random.choice(np.where(dataset.target == i)[0]))
+        # 存储8条信号
+        noisy_signals = dataset.data[indexes].copy()
+
         n_steps = denoising_properties['n_steps']
         config_id = denoising_properties['config_id']
         root_dir = denoising_properties['root_dir']
@@ -474,12 +471,16 @@ def prepare_data(data_path='./data',
                                           simple_var=True).detach().cpu().numpy()
             dataset.data[pre:] = cur
         # 绘制8个处理后的信号
-        for i in range(8, 16):
-            plt.subplot(4, 4, i + 1)
-            plt.plot(dataset.data[indexes[i - 8]][0])
-            plt.title(task_type + f'signal {i - 7}')
-            plt.xlabel('time')
-            plt.ylabel('amplitude')
+        fig, axs = plt.subplots(2, 4, figsize=(24, 10))
+        fig.tight_layout(h_pad=5, w_pad=5)
+        for i in range(8):
+            ax = axs[i // 4, i % 4]
+            ax.plot(noisy_signals[i][0], label='noisy signal')  # 绘制噪声信号
+            ax.plot(dataset.data[indexes[i]][0], label='denoised signal')  # 绘制去噪后的信号
+            ax.set_xlabel('time')
+            ax.set_ylabel('amplitude')
+            ax.set_title(task_type + f'signal {i + 1}, label is{dataset.target[indexes[i]]}')
+            ax.legend()
         # 保存图像
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
         # 将处理后的数据保存
@@ -488,16 +489,19 @@ def prepare_data(data_path='./data',
         dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
         task_type = 'original' if not add_noise else 'noisy'
-        # 取出前8个信号，绘制信号的图
-        indexes = np.random.choice(len(dataset.data), 8, replace=False)
-        fig, ax = plt.subplots(2, 4, figsize=(10, 6))
+        # 根据dataset.target,选择8个不同标签的信号,使得每个标签的信号都有一个
+        indexes = []
+        for i in range(8):
+            indexes.append(np.random.choice(np.where(dataset.target == i)[0]))
+        fig, ax = plt.subplots(2, 4, figsize=(24, 6))
         fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
-            plt.subplot(2, 4, i + 1)
-            plt.plot(dataset.data[indexes[i]][0])
-            plt.title(task_type + f'signal {i + 1}')
-            plt.xlabel('time')
-            plt.ylabel('amplitude')
+            ax = plt.subplot(2, 4, i + 1)
+            ax.plot(dataset.data[indexes[i]][0])
+            ax.set_title(task_type + f'signal {i + 1}, label is{dataset.target[indexes[i]]}')
+            ax.set_xlabel('time')
+            ax.set_ylabel('amplitude')
+
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
     print('data prepared')
     return dataset, task_type
@@ -590,29 +594,29 @@ if __name__ == '__main__':
         'root_dir': './run/0510biglstm',  # 保存模型的路径
         'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
     }
-    # prepare_data(add_noise=True, denoising_properties=denoising_properties)  # 准备数据，添加噪声，以及去噪
-    # prepare_data(add_noise=False)  # 准备数据，不添加噪声
-    # prepare_data(add_noise=True)  # 准备数据，添加噪声
+    prepare_data(add_noise=True, denoising_properties=d_p)  # 准备数据，添加噪声，以及去噪
+    prepare_data(add_noise=False)  # 准备数据，不添加噪声
+    prepare_data(add_noise=True)  # 准备数据，添加噪声
     # del_labels = ['Aligned', 'Parallel', 'Unbalance']  # 删除的标签,
     # 一共有8个标签,分别是 Aligned, Bearing, Bowed, Broken, Normal, Parallel, SWF, Unbalance
     # 删除后剩下5个标签，分别是 Bearing, Bowed, Broken, Normal, SWF
-    dataset_config = {
-        'data_path': './data',
-        'slice_length': 512,
-        'slice_type': 'window',  # 'cut','window'
-        'windows_ratio': 0.05,
-    }
-    train_classification(
-        log_dirs=['./run/0513mini_n', './run/0513small_n', './run/0513medium_n', './run/0513big_n'],
-        ds_config=dataset_config, add_noise=True, batch_size=batch_size
-    )  # 训练分类模型， 输入为带噪声的信号
-
-    train_classification(
-        log_dirs=['./run/0513mini_o', './run/0513small_o', './run/0513medium_o', './run/0513big_o'],
-        ds_config=dataset_config, add_noise=False, batch_size=batch_size
-    )  # 训练分类模型， 输入为原始信号
-
-    train_classification(
-        log_dirs=['./run/0513mini_dn', './run/0513small_dn', './run/0513medium_dn', './run/0513big_dn']
-        , denoising_properties=d_p, ds_config=dataset_config, batch_size=batch_size
-    )  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
+    # dataset_config = {
+    #     'data_path': './data',
+    #     'slice_length': 512,
+    #     'slice_type': 'window',  # 'cut','window'
+    #     'windows_ratio': 0.05,
+    # }
+    # train_classification(
+    #     log_dirs=['./run/0516mini_n', './run/0516small_n', './run/0516medium_n', './run/0516big_n'],
+    #     ds_config=dataset_config, add_noise=True, batch_size=batch_size
+    # )  # 训练分类模型， 输入为带噪声的信号
+    #
+    # train_classification(
+    #     log_dirs=['./run/0516mini_o', './run/0516small_o', './run/0516medium_o', './run/0516big_o'],
+    #     ds_config=dataset_config, add_noise=False, batch_size=batch_size
+    # )  # 训练分类模型， 输入为原始信号
+    #
+    # train_classification(
+    #     log_dirs=['./run/0516mini_dn', './run/0516small_dn', './run/0516medium_dn', './run/0516big_dn']
+    #     , denoising_properties=d_p, ds_config=dataset_config, batch_size=batch_size
+    # )  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号

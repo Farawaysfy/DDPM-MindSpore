@@ -333,11 +333,11 @@ def tensor2signal(tensor):  # 将tensor转换为numpy
     return tensor.numpy()[0]
 
 
-def generate_mixed_signal_data(signals: np.ndarray):
+def generate_mixed_signal_data(signals: np.ndarray, snr=-30):
     """
-    生成混合信号数据集，包括正弦波形和复合波形，具有不同的频率和幅值，以及不同的信噪比。
+    生成混合信号数据集
     :param signals: 原始信号数据集
-    :param snr: 信噪比
+    :param snr: 信噪比, 默认为-30,需要统一信噪比
     :return: 原始信号和带噪声的信号
     """
     signals = np.zeros((10000, 512), dtype=np.float16) if signals is None else signals
@@ -351,7 +351,7 @@ def generate_mixed_signal_data(signals: np.ndarray):
         signal_power = np.mean(signal ** 2)
 
         # 给定信噪比，计算噪声功率
-        snr = np.random.randint(-35, -30)  # 信噪比在-20到-10之间随机取值
+        # snr = np.random.randint(-35, -30)  # 信噪比在-20到-10之间随机取值
         snr_linear = 10 ** (snr / 10)
         noise_power = signal_power / snr_linear
 
