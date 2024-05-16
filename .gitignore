@@ -12,3 +12,4 @@ model/wf_512_vit_sample_best300_64batch.ckpt
 /work_dirs/stft
 /work_dirs/wf
 *.csv
+*.png
