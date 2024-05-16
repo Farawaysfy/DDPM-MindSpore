@@ -471,10 +471,10 @@ def prepare_data(data_path='./data',
                                           simple_var=True).detach().cpu().numpy()
             dataset.data[pre:] = cur
         # 绘制8个处理后的信号
-        fig, axs = plt.subplots(2, 4, figsize=(24, 10))
+        fig, axs = plt.subplots(4, 2, figsize=(12, 24))
         fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
-            ax = axs[i // 4, i % 4]
+            ax = axs[i % 4, i // 4]
             ax.plot(noisy_signals[i][0], label='noisy signal')  # 绘制噪声信号
             ax.plot(dataset.data[indexes[i]][0], label='denoised signal')  # 绘制去噪后的信号
             ax.set_xlabel('time')
@@ -493,14 +493,15 @@ def prepare_data(data_path='./data',
         indexes = []
         for i in range(8):
             indexes.append(np.random.choice(np.where(dataset.target == i)[0]))
-        fig, ax = plt.subplots(2, 4, figsize=(24, 6))
+        fig, axs = plt.subplots(4, 2, figsize=(12, 24))
         fig.tight_layout(h_pad=5, w_pad=5)
         for i in range(8):
-            ax = plt.subplot(2, 4, i + 1)
+            ax = axs[i % 4, i // 4]
             ax.plot(dataset.data[indexes[i]][0])
-            ax.set_title(task_type + f'signal {i + 1}, label is{dataset.target[indexes[i]]}')
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
+            ax.set_title(task_type + f'signal {i + 1}, label is{dataset.target[indexes[i]]}')
+
 
         plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
     print('data prepared')
