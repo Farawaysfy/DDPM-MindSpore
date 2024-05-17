@@ -189,29 +189,32 @@ class ConvNet1D(nn.Module):
 
 
 class ConvNet1DClassify(nn.Module):
+    def __init__(self, intermediate_channels=None, out_dim=10):
+        """
+        初始化1D卷积网络分类器。
 
-    def __init__(self,
-                 intermediate_channels=None,
-                 out_dim=10):
-        super().__init__()
+        参数:
+        - intermediate_channels (list): 每个卷积层的通道数。
+        - out_dim (int): 输出的类别数。
+        """
+        super(ConvNet1DClassify, self).__init__()
         if intermediate_channels is None:
             intermediate_channels = [10, 20, 40]
-        C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
+        C, H, W = get_shape()  # 假设输入信号的channel为1，height为1，width为length
 
         self.cnn1d_blocks = nn.ModuleList()
         prev_channel = H
         for channel in intermediate_channels:
-            self.cnn1d_blocks.append(nn.Sequential(
+            block = nn.Sequential(
                 nn.Conv1d(prev_channel, channel, 3, 1, 1),
                 nn.BatchNorm1d(channel),
                 nn.ReLU(),
-            ))
+                nn.MaxPool1d(2) if W > 32 else nn.Identity(),  # 池化层，只有当W > 32时应用
+                nn.Dropout(0.5)  # Dropout层
+            )
+            self.cnn1d_blocks.append(block)
             prev_channel = channel
-            if W <= 32:
-                self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
-            else:
-                self.cnn1d_blocks[-1].add_module('max pool', nn.MaxPool1d(2))
-                self.cnn1d_blocks[-1].add_module('dropout', nn.Dropout(0.5))
+            if W > 32:
                 W //= 2
 
         self.fces = nn.Sequential(
@@ -222,6 +225,15 @@ class ConvNet1DClassify(nn.Module):
         )
 
     def forward(self, x):
+        """
+        前向传播函数。
+
+        参数:
+        - x (torch.Tensor): 输入张量，形状为 (batch_size, channels, length)。
+
+        返回:
+        - torch.Tensor: 输出张量，形状为 (batch_size, out_dim)。
+        """
         for m_x in self.cnn1d_blocks:
             x = m_x(x)
         return self.fces(x.flatten(1))
