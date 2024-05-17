@@ -20,6 +20,7 @@ from model.vit import VisionTransformer
 from utils.dataset import get_shape, get_signal_dataloader, tensor2signal, createFolder, GeneralFigures, \
     tensor2img, make_noise, Signals, KM_signal, WD_signal
 from utils.early_stop import EarlyStopping
+from utils.feature_plot import pca_plot, t_sne_plot, umap_plot
 from utils.fft_plot import FFTPlot
 
 batch_size = 512  # 最大化利用显存
@@ -442,7 +443,7 @@ def prepare_data(data_path='./data',
         add_noise = True
         dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
-        task_type = 'denoising'
+        task_type = ' denoising'
         # 根据dataset.target,选择8个不同标签的信号,使得每个标签的信号都有一个
         indexes = []
         for i in range(8):
@@ -485,15 +486,15 @@ def prepare_data(data_path='./data',
             ax.plot(dataset.data[indexes[i]][0], label='denoised signal')  # 绘制去噪后的信号
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
-            ax.set_title(task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
+            ax.set_title(denoising_properties['denoising method'] + task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
             ax.legend()
         # 保存图像
         fig.fontsize = 20
         fig.tight_layout()
-        plt.savefig(os.path.join('./work_dirs/classify', task_type + '_signal.png'))
+        plt.savefig(os.path.join('./work_dirs/classify',denoising_properties['denoising method'] + task_type + '_signal.png'))
         plt.close()
         # 将处理后的数据保存
-        dataset.save(root_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr')
+        # dataset.save(root_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr')
     else:
         dataset = Signals(data_path, slice_length=slice_length, slice_type=slice_type,
                           add_noise=add_noise, windows_rate=windows_ratio, delete_labels=delete_labels)
@@ -523,6 +524,8 @@ def test_classification(writer, device, model, config_id, log_dir, test_dataload
     net = build_network(config)
     net.load_state_dict(torch.load(os.path.join(log_dir, model)))
     net = net.to(device).eval()
+    feature = []
+    true_labels = []
     with torch.no_grad():
         acc = 0
         for x, y in tqdm(test_dataloader, desc='validating'):
@@ -530,8 +533,15 @@ def test_classification(writer, device, model, config_id, log_dir, test_dataload
             y = y.to(device).long()
             logits = net(x)
             acc += (logits.argmax(dim=-1) == y).float().mean()
+            feature.append(logits.detach().cpu().numpy())
+            true_labels.append(y.detach().cpu().numpy())
         acc /= len(test_dataloader)
         writer.add_scalar('test acc', acc.item())
+        feature = np.concatenate(feature, axis=0)
+        true_labels = np.concatenate(true_labels, axis=0)
+        pca_plot(feature, true_labels, 'test', log_dir)
+        t_sne_plot(feature, true_labels, 'test', log_dir)
+        umap_plot(feature, true_labels, 'test', log_dir)
         print(f'accuracy: {acc.item()}')
         return acc.item()
 
@@ -615,7 +625,7 @@ if __name__ == '__main__':
     dataset_config = {
         'data_path': './data',
         'slice_length': 512,
-        'slice_type': 'window',  # 'cut','window'
+        'slice_type': 'cut',  # 'cut','window'
         'windows_ratio': 0.05,
     }
     train_classification(

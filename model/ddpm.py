@@ -153,10 +153,12 @@ class ConvNet1D(nn.Module):
 
     def __init__(self,
                  n_steps,
-                 intermediate_channels=[10, 20, 40],
+                 intermediate_channels=None,
                  pe_dim=10,
                  insert_t_to_all_layers=False):
         super().__init__()
+        if intermediate_channels is None:
+            intermediate_channels = [10, 20, 40]
         C, H, W = get_shape()  # 一维信号的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
         self.pe = PositionalEncoding(n_steps, pe_dim)
 
@@ -171,8 +173,6 @@ class ConvNet1D(nn.Module):
             self.residual_blocks.append(ResidualBlock1D(prev_channel, channel))
             if insert_t_to_all_layers:
                 self.pe_linears.append(nn.Linear(pe_dim, prev_channel))
-            else:
-                self.pe_linears.append(None)
             prev_channel = channel
         self.output_layer = nn.Conv1d(prev_channel, C, 3, 1, 1)
 
@@ -231,10 +231,12 @@ class ConvNet(nn.Module):
 
     def __init__(self,
                  n_steps,
-                 intermediate_channels=[10, 20, 40],
+                 intermediate_channels=None,
                  pe_dim=10,
                  insert_t_to_all_layers=False):
         super().__init__()
+        if intermediate_channels is None:
+            intermediate_channels = [10, 20, 40]
         C, H, W = get_shape()  # 1, 28, 28;图片的channel, height, width, 当输入信号时，channel是1，形状为1，1，length
         self.pe = PositionalEncoding(n_steps, pe_dim)
 
