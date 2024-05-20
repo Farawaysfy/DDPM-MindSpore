@@ -221,9 +221,9 @@ def train_ddpm_step(ddpm: DDPM, net, device='cuda', ckpt_path='./model/model.pth
     dataloader = get_signal_dataloader(path, batch_size, slice_length, slice_type='cut')
     net = net.to(device)  # 将网络放到GPU上, 并且将网络的参数类型设置为double
     loss_fn = nn.HuberLoss()  # 损失函数, 参数是huber loss的权重
-    optimizer = torch.optim.AdamW(net.parameters(), lr=1e-2, weight_decay=1e-4)  # 优化器
+    optimizer = torch.optim.AdamW(net.parameters(), lr=1e-1, weight_decay=1e-2)  # 优化器
 
-    ealy_stop = EarlyStopping(log_dir, patience=10, verbose=True)
+    ealy_stop = EarlyStopping(log_dir, patience=30, verbose=True)
     i = 0
     best_loss = np.inf  # 初始化最好的损失为无穷大
     for e in range(n_epochs):
@@ -378,7 +378,7 @@ def cnn_train(writer, net, train_dataloader, val_dataloader, device, ckpt_path, 
         for x, y in tqdm(train_dataloader, desc='train Epoch {}'.format(e)):  # 训练
             x = x.to(device).float()
             y = y.to(device).long()
-            logits = net(x)
+            _, logits = net(x)
             loss = loss_fn(logits, y)
             optimizer.zero_grad()
             loss.backward()  # 反向传播
@@ -389,7 +389,7 @@ def cnn_train(writer, net, train_dataloader, val_dataloader, device, ckpt_path, 
         for x, y in tqdm(val_dataloader, desc='val Epoch {}'.format(e)):  # 测试
             x = x.to(device).float()
             y = y.to(device).long()
-            logits = net(x)
+            _, logits = net(x)
             loss = loss_fn(logits, y)
             val_acc += (logits.argmax(dim=-1) == y).float().mean()
             val_loss += loss.item()
@@ -479,19 +479,21 @@ def prepare_data(data_path='./data',
         elif denoising_properties['denoising method'] == 'wavelet':  # 使用小波变换去噪
             dataset.data = WD_signal(dataset.data)
         # 绘制8个处理后的信号
-        fig, axs = plt.subplots(2, 4, figsize=(24, 10))
-        for i in range(8):
-            ax = axs[i // 4, i % 4]
+        fig, axs = plt.subplots(2, 2, figsize=(24, 10))
+        for i in range(4):
+            ax = axs[i // 2, i % 2]
             ax.plot(noisy_signals[i][0], label='noisy signal')  # 绘制噪声信号
             ax.plot(dataset.data[indexes[i]][0], label='denoised signal')  # 绘制去噪后的信号
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
-            ax.set_title(denoising_properties['denoising method'] + task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
+            ax.set_title(denoising_properties[
+                             'denoising method'] + task_type + f' signal {i + 1}, label:{dataset.target[indexes[i]]}')
             ax.legend()
         # 保存图像
         fig.fontsize = 20
         fig.tight_layout()
-        plt.savefig(os.path.join('./work_dirs/classify',denoising_properties['denoising method'] + task_type + '_signal.png'))
+        plt.savefig(
+            os.path.join('./work_dirs/classify', denoising_properties['denoising method'] + task_type + '_signal.png'))
         plt.close()
         # 将处理后的数据保存
         # dataset.save(root_dir, 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr')
@@ -501,11 +503,11 @@ def prepare_data(data_path='./data',
         task_type = 'pure' if not add_noise else 'noisy'
         # 根据dataset.target,选择8个不同标签的信号,使得每个标签的信号都有一个
         indexes = []
-        for i in range(8):
+        for i in range(4):
             indexes.append(np.random.choice(np.where(dataset.target == i)[0]))
-        fig, axs = plt.subplots(2, 4, figsize=(24, 10))
-        for i in range(8):
-            ax = axs[i // 4, i % 4]
+        fig, axs = plt.subplots(2, 2, figsize=(24, 10))
+        for i in range(4):
+            ax = axs[i // 2, i % 2]
             ax.plot(dataset.data[indexes[i]][0])
             ax.set_xlabel('time')
             ax.set_ylabel('amplitude')
@@ -519,31 +521,29 @@ def prepare_data(data_path='./data',
     return dataset, task_type
 
 
-def test_classification(writer, device, model, config_id, log_dir, test_dataloader):
+def test_classification(writer, device, model, config_id, log_dir, test_dataloader, task_type):
     config = configs[config_id]
     net = build_network(config)
     net.load_state_dict(torch.load(os.path.join(log_dir, model)))
     net = net.to(device).eval()
-    feature = []
+    features = []
     true_labels = []
     with torch.no_grad():
         acc = 0
         for x, y in tqdm(test_dataloader, desc='validating'):
             x = x.to(device).float()
             y = y.to(device).long()
-            logits = net(x)
+            feature, logits = net(x)
             acc += (logits.argmax(dim=-1) == y).float().mean()
-            feature.append(logits.detach().cpu().numpy())
+            features.append(feature.detach().cpu().numpy())
             true_labels.append(y.detach().cpu().numpy())
         acc /= len(test_dataloader)
         writer.add_scalar('test acc', acc.item())
-        feature = np.concatenate(feature, axis=0)
-        true_labels = np.concatenate(true_labels, axis=0)
-        pca_plot(feature, true_labels, 'test', log_dir)
-        t_sne_plot(feature, true_labels, 'test', log_dir)
-        umap_plot(feature, true_labels, 'test', log_dir)
-        print(f'accuracy: {acc.item()}')
-        return acc.item()
+    features = np.concatenate(features, axis=0)
+    true_labels = np.concatenate(true_labels, axis=0)
+    pca_plot(features, true_labels, task_type, log_dir)
+    t_sne_plot(features, true_labels, task_type, log_dir)  # t-sne降维,绘图特别慢
+    umap_plot(features, true_labels, task_type, log_dir)
 
 
 def train_classification(log_dirs, ds_config, add_noise=False, denoising_properties=None, batch_size=512):
@@ -588,18 +588,29 @@ def train_classification(log_dirs, ds_config, add_noise=False, denoising_propert
                   'classify_cnn1d_small_best300_512batch_' + task_type + '.ckpt',
                   'classify_cnn1d_medium_best300_512batch_' + task_type + '.ckpt',
                   'classify_cnn1d_big_best300_512batch_' + task_type + '.ckpt']
-    for model, config_id, log_dir in zip(model_name, config_ids, log_dirs):
+    dic = {
+        'mini': 0,
+        'small': 1,
+        'medium': 2,
+        'big': 3
+    }
+    for log_dir in log_dirs:
+        for key in dic.keys():
+            if key in log_dir:
+                config_id = config_ids[dic[key]]
+                model = model_name[dic[key]]
+                break
         writer = SummaryWriter(log_dir=log_dir, filename_suffix=str(n_epochs), flush_secs=5)
         train_classification_step(writer, device, model, config_id, log_dir, train_dataloader=train_dataloader,
                                   val_dataloader=val_dataloader, n_epochs=n_epochs)
-        test_classification(writer, device, model, config_id, log_dir, test_dataloader)
+        test_classification(writer, device, model, config_id, log_dir, test_dataloader, task_type)
 
 
 def train_sd_ddim():
-    model_names = ['reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth',
-                   'reduce_noise_model_bi_lstm_medium_huber_loss_power_snr.pth',
-                   'reduce_noise_model_bi_lstm_small_huber_loss_power_snr.pth']
-    log_dirs = ['./run/0510biglstm', './run/0510mediumlstm', './run/0510smalllstm']
+    model_names = ['sd_model_bi_lstm_big_huber_loss_power_snr.pth',
+                   'sd_model_bi_lstm_medium_huber_loss_power_snr.pth',
+                   'sd_model_bi_lstm_small_huber_loss_power_snr.pth']
+    log_dirs = ['./run/0520biglstm', './run/0520mediumlstm', './run/0520smalllstm']
     config_ids = [11, 12, 13]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -608,47 +619,51 @@ def train_sd_ddim():
 
 
 if __name__ == '__main__':
-    batch_size = 512
+    # train_sd_ddim()
+    # batch_size = 512
     d_p = {
         'denoising method': 'sdddim',  # 选择去噪方法, 可以选择sd_ddim, kalman, wavelet
         'n_steps': 2000,  # ddpm的步数
         'config_id': 11,  # 11, 12, 13, 分别对应大中小
-        'root_dir': './model/sdddim_model',  # 保存模型的路径
-        'model_name': 'reduce_noise_model_bi_lstm_big_huber_loss_power_snr.pth'  # 模型名称
+        'root_dir': './run/0520biglstm',  # 保存模型的路径
+        'model_name': 'best_network.pth'  # 模型名称
     }
     # prepare_data(add_noise=True, denoising_properties=d_p)  # 准备数据，添加噪声，以及去噪
     # prepare_data(add_noise=False)  # 准备数据，不添加噪声
     # prepare_data(add_noise=True)  # 准备数据，添加噪声
-    # del_labels = ['Aligned', 'Parallel', 'Unbalance']  # 删除的标签,
+    del_labels = ['Broken', 'Parallel', 'SWF', 'Unbalance']
     # 一共有8个标签,分别是 Aligned, Bearing, Bowed, Broken, Normal, Parallel, SWF, Unbalance
-    # 删除后剩下5个标签，分别是 Bearing, Bowed, Broken, Normal, SWF
+    # 删除后剩下5个标签，分别是 Aligned, Bearing, Bowed, Normal
     dataset_config = {
         'data_path': './data',
         'slice_length': 512,
         'slice_type': 'cut',  # 'cut','window'
         'windows_ratio': 0.05,
+        'delete_labels': del_labels,
     }
     train_classification(
-        log_dirs=['./run/0516n/mini', './run/0516n/small', './run/0516n/medium', './run/0516n/big'],
+        log_dirs=['./run/0520n/mini', './run/0520n/small', './run/0520n/medium', './run/0520n/big'],
         ds_config=dataset_config, add_noise=True, batch_size=batch_size
     )  # 训练分类模型， 输入为带噪声的信号
 
     train_classification(
-        log_dirs=['./run/0516o/mini', './run/0516o/small', './run/0516o/medium', './run/0516o/big'],
+        log_dirs=['./run/0520o/mini', './run/0520o/small', './run/0520o/medium', './run/0520o/big'],
         ds_config=dataset_config, add_noise=False, batch_size=batch_size
     )  # 训练分类模型， 输入为原始信号
 
     train_classification(
-        log_dirs=['./run/0516dn/mini', './run/0516dn/small', './run/0516dn/medium', './run/0516dn/big'],
+        log_dirs=['./run/0520dn/mini', './run/0520dn/small', './run/0520dn/medium', './run/0520dn/big'],  #
         denoising_properties=d_p, ds_config=dataset_config, batch_size=batch_size
     )  # 训练分类模型， 输入为带噪声的信号经过sd_ddim去噪后的信号
     d_p['denoising method'] = 'kalman'
+    # prepare_data(add_noise=True, denoising_properties=d_p)  # 准备数据，添加噪声，以及去噪
     train_classification(
-        log_dirs=['./run/0516kal/mini', './run/0516kal/small', './run/0516kal/medium', './run/0516kal/big']
+        log_dirs=['./run/0520kal/mini', './run/0520kal/small', './run/0520kal/medium', './run/0520kal/big']
         , denoising_properties=d_p, ds_config=dataset_config, batch_size=batch_size
-    )   # 训练分类模型， 输入为带噪声的信号经过kalman去噪后的信号
+    )  # 训练分类模型， 输入为带噪声的信号经过kalman去噪后的信号
     d_p['denoising method'] = 'wavelet'
+    # prepare_data(add_noise=True, denoising_properties=d_p)  # 准备数据，添加噪声，以及去噪
     train_classification(
-        log_dirs=['./run/0516wvlt/mini', './run/0516wvlt/small', './run/0516wvlt/medium', './run/0516wvlt/big']
+        log_dirs=['./run/0520wvlt/mini', './run/0520wvlt/small', './run/0520wvlt/medium', './run/0520wvlt/big']
         , denoising_properties=d_p, ds_config=dataset_config, batch_size=batch_size
-    )   # 训练分类模型， 输入为带噪声的信号经过wavelet去噪后的信号
+    )  # 训练分类模型， 输入为带噪声的信号经过wavelet去噪后的信号
